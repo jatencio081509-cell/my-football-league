@@ -45,19 +45,89 @@ function teamKey(team) {
 }
 
 // ============================================
+// SEEDED RANDOM + PLAYER GENERATION
+// ============================================
+function mulberry32(a) {
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const FIRST_NAMES = ["James","John","Robert","Michael","David","William","Richard","Joseph","Thomas","Christopher","Charles","Daniel","Matthew","Anthony","Mark","Donald","Steven","Paul","Andrew","Joshua","Kenneth","Kevin","Brian","George","Timothy","Ronald","Edward","Jason","Jeffrey","Ryan","Jacob","Gary","Nicholas","Eric","Jonathan","Stephen","Larry","Justin","Scott","Brandon","Benjamin","Samuel","Raymond","Gregory","Frank","Alexander","Patrick","Jack","Dennis","Jerry","Tyler","Aaron","Jose","Adam","Nathan","Henry","Douglas","Zachary","Peter","Kyle","Noah","Ethan","Jeremy","Walter","Christian","Keith","Roger","Terry","Austin","Sean","Gerald","Carl","Harold","Dylan","Jesse","Bryan","Billy","Jordan","Albert","Jesse","Bruce","Gabriel","Logan","Alan","Juan","Wayne","Ralph","Roy","Eugene","Randy","Vincent","Russell","Louis","Philip","Bobby","Johnny","Bradley"];
+
+const LAST_NAMES = ["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Rodriguez","Martinez","Hernandez","Lopez","Gonzalez","Wilson","Anderson","Thomas","Taylor","Moore","Jackson","Martin","Lee","Perez","Thompson","White","Harris","Sanchez","Clark","Ramirez","Lewis","Robinson","Walker","Young","Allen","King","Wright","Scott","Torres","Nguyen","Hill","Flores","Green","Adams","Nelson","Baker","Hall","Rivera","Campbell","Mitchell","Carter","Roberts","Gomez","Phillips","Evans","Turner","Diaz","Parker","Cruz","Edwards","Collins","Reyes","Stewart","Morris","Morales","Murphy","Cook","Rogers","Gutierrez","Ortiz","Morgan","Cooper","Peterson","Bailey","Reed","Kelly","Howard","Ramos","Kim","Cox","Ward","Richardson","Watson","Brooks","Chavez","Wood","James","Bennett","Gray","Mendoza","Ruiz","Hughes","Price","Alvarez","Castillo","Sanders","Patel","Myers","Long","Ross","Foster","Jimenez"];
+
+const POSITIONS = [
+  { pos: "QB", count: 3, hMin: 72, hMax: 77, wMin: 200, wMax: 240 },
+  { pos: "RB", count: 4, hMin: 68, hMax: 73, wMin: 195, wMax: 230 },
+  { pos: "WR", count: 6, hMin: 69, hMax: 76, wMin: 175, wMax: 220 },
+  { pos: "TE", count: 3, hMin: 74, hMax: 78, wMin: 240, wMax: 270 },
+  { pos: "OL", count: 9, hMin: 74, hMax: 79, wMin: 290, wMax: 340 },
+  { pos: "DL", count: 7, hMin: 73, hMax: 78, wMin: 270, wMax: 330 },
+  { pos: "LB", count: 7, hMin: 71, hMax: 76, wMin: 225, wMax: 260 },
+  { pos: "CB", count: 5, hMin: 69, hMax: 74, wMin: 175, wMax: 205 },
+  { pos: "S", count: 4, hMin: 70, hMax: 75, wMin: 190, wMax: 220 },
+  { pos: "K", count: 1, hMin: 70, hMax: 75, wMin: 180, wMax: 220 },
+  { pos: "P", count: 1, hMin: 71, hMax: 76, wMin: 190, wMax: 230 },
+];
+
+function inchesToHeight(inches) {
+  const feet = Math.floor(inches / 12);
+  const inch = inches % 12;
+  return `${feet}'${inch}"`;
+}
+
+function generateRosters() {
+  const allRosters = {};
+
+  TEAMS.forEach((team, teamIndex) => {
+    const rng = mulberry32(1000 + teamIndex * 97);
+    const players = [];
+
+    POSITIONS.forEach(slot => {
+      for (let i = 0; i < slot.count; i++) {
+        const first = FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)];
+        const last = LAST_NAMES[Math.floor(rng() * LAST_NAMES.length)];
+        const age = 21 + Math.floor(rng() * 14); // 21-34
+        const heightIn = slot.hMin + Math.floor(rng() * (slot.hMax - slot.hMin + 1));
+        const weight = slot.wMin + Math.floor(rng() * (slot.wMax - slot.wMin + 1));
+
+        // Rating: slightly higher chance of average players
+        let rating = 55 + Math.floor(rng() * 35);
+        if (rng() > 0.85) rating = 80 + Math.floor(rng() * 15); // star chance
+        if (rng() > 0.95) rating = 92 + Math.floor(rng() * 7);  // elite chance
+
+        players.push({
+          name: `${first} ${last}`,
+          position: slot.pos,
+          age,
+          height: inchesToHeight(heightIn),
+          weight,
+          rating
+        });
+      }
+    });
+
+    // Sort by rating descending so best players appear first
+    players.sort((a, b) => b.rating - a.rating);
+    allRosters[teamKey(team)] = players;
+  });
+
+  return allRosters;
+}
+
+const ROSTERS = generateRosters();
+
+// ============================================
 // STANDINGS
 // ============================================
 function createEmptyStandings() {
   const standings = {};
   TEAMS.forEach(team => {
-    standings[teamKey(team)] = {
-      team,
-      wins: 0,
-      losses: 0,
-      ties: 0,
-      pf: 0,
-      pa: 0
-    };
+    standings[teamKey(team)] = { team, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
   });
   return standings;
 }
@@ -65,17 +135,13 @@ function createEmptyStandings() {
 function loadStandings() {
   const saved = localStorage.getItem("mfl-standings");
   if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch (e) {
-      return createEmptyStandings();
-    }
+    try { return JSON.parse(saved); } catch (e) { return createEmptyStandings(); }
   }
   return createEmptyStandings();
 }
 
-function saveStandings(standings) {
-  localStorage.setItem("mfl-standings", JSON.stringify(standings));
+function saveStandings(s) {
+  localStorage.setItem("mfl-standings", JSON.stringify(s));
 }
 
 let standings = loadStandings();
@@ -102,7 +168,6 @@ function recordGameResult(homeTeam, awayTeam, homeScore, awayScore) {
     standings[homeKey].ties += 1;
     standings[awayKey].ties += 1;
   }
-
   saveStandings(standings);
 }
 
@@ -119,10 +184,7 @@ function getSortedStandings() {
 function renderStandings() {
   const tbody = $("standings-body");
   tbody.innerHTML = "";
-
-  const sorted = getSortedStandings();
-
-  sorted.forEach((row, index) => {
+  getSortedStandings().forEach((row, index) => {
     const gamesPlayed = row.wins + row.losses + row.ties;
     const pct = gamesPlayed === 0 ? ".000" : (row.wins / gamesPlayed).toFixed(3).replace(/^0/, "");
     const diff = row.pf - row.pa;
@@ -133,14 +195,9 @@ function renderStandings() {
     tr.innerHTML = `
       <td class="rank">${index + 1}</td>
       <td class="team-cell">${teamName(row.team)}</td>
-      <td>${row.wins}</td>
-      <td>${row.losses}</td>
-      <td>${row.ties}</td>
-      <td>${pct}</td>
-      <td>${row.pf}</td>
-      <td>${row.pa}</td>
-      <td class="${diffClass}">${diffText}</td>
-    `;
+      <td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td>
+      <td>${pct}</td><td>${row.pf}</td><td>${row.pa}</td>
+      <td class="${diffClass}">${diffText}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -164,26 +221,20 @@ const AWARD_DEFINITIONS = [
 
 function createEmptyAwards() {
   const awards = {};
-  AWARD_DEFINITIONS.forEach(a => {
-    awards[a.id] = { player: "", teamKey: "" };
-  });
+  AWARD_DEFINITIONS.forEach(a => { awards[a.id] = { player: "", teamKey: "" }; });
   return awards;
 }
 
 function loadAwards() {
   const saved = localStorage.getItem("mfl-awards");
   if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch (e) {
-      return createEmptyAwards();
-    }
+    try { return JSON.parse(saved); } catch (e) { return createEmptyAwards(); }
   }
   return createEmptyAwards();
 }
 
-function saveAwards(awards) {
-  localStorage.setItem("mfl-awards", JSON.stringify(awards));
+function saveAwards(a) {
+  localStorage.setItem("mfl-awards", JSON.stringify(a));
 }
 
 let awards = loadAwards();
@@ -197,9 +248,6 @@ function renderAwards() {
     const team = TEAMS.find(t => teamKey(t) === current.teamKey);
     const hasWinner = current.player || current.teamKey;
 
-    const card = document.createElement("div");
-    card.className = "award-card";
-
     let winnerText = "Not yet awarded";
     if (hasWinner) {
       if (def.id === "best_defense" || def.id === "coach") {
@@ -209,6 +257,8 @@ function renderAwards() {
       }
     }
 
+    const card = document.createElement("div");
+    card.className = "award-card";
     card.innerHTML = `
       <div class="award-title">${def.title}</div>
       <div class="award-winner ${hasWinner ? "" : "empty"}">${winnerText}</div>
@@ -219,26 +269,57 @@ function renderAwards() {
           ${TEAMS.map(t => `<option value="${teamKey(t)}" ${current.teamKey === teamKey(t) ? "selected" : ""}>${teamName(t)}</option>`).join("")}
         </select>
         <button class="btn primary small award-save-btn" data-award="${def.id}">Save</button>
-      </div>
-    `;
-
+      </div>`;
     container.appendChild(card);
   });
 
-  // Attach save listeners
   document.querySelectorAll(".award-save-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.award;
       const playerInput = document.querySelector(`.award-player-input[data-award="${id}"]`);
       const teamSelect = document.querySelector(`.award-team-select[data-award="${id}"]`);
-
-      awards[id] = {
-        player: playerInput.value.trim(),
-        teamKey: teamSelect.value
-      };
+      awards[id] = { player: playerInput.value.trim(), teamKey: teamSelect.value };
       saveAwards(awards);
       renderAwards();
     });
+  });
+}
+
+// ============================================
+// ROSTERS UI
+// ============================================
+function populateRosterSelect() {
+  const select = $("roster-team-select");
+  select.innerHTML = "";
+  TEAMS.forEach((team, i) => {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = teamName(team);
+    select.appendChild(opt);
+  });
+}
+
+function renderRoster(teamIndex) {
+  const team = TEAMS[teamIndex];
+  const players = ROSTERS[teamKey(team)] || [];
+  const tbody = $("roster-body");
+  tbody.innerHTML = "";
+
+  players.forEach((p, i) => {
+    let ratingClass = "rating-low";
+    if (p.rating >= 85) ratingClass = "rating-high";
+    else if (p.rating >= 70) ratingClass = "rating-mid";
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="rank">${i + 1}</td>
+      <td class="team-cell">${p.name}</td>
+      <td>${p.position}</td>
+      <td>${p.age}</td>
+      <td>${p.height}</td>
+      <td>${p.weight}</td>
+      <td class="${ratingClass}">${p.rating}</td>`;
+    tbody.appendChild(tr);
   });
 }
 
@@ -249,48 +330,33 @@ let game = null;
 
 function createNewGame(home, away) {
   return {
-    home,
-    away,
-    homeScore: 0,
-    awayScore: 0,
-    quarter: 1,
-    clockSeconds: 15 * 60,
-    possession: "home",
-    down: 1,
-    distance: 10,
-    yardLine: 25,
+    home, away,
+    homeScore: 0, awayScore: 0,
+    quarter: 1, clockSeconds: 15 * 60,
+    possession: "home", down: 1, distance: 10, yardLine: 25,
     playLog: [`Game started: ${teamName(away)} at ${teamName(home)}`, "Kickoff — ball at the 25"],
-    gameOver: false,
-    resultRecorded: false
+    gameOver: false, resultRecorded: false
   };
 }
 
 // ============================================
 // UI HELPERS
 // ============================================
-function $(id) {
-  return document.getElementById(id);
-}
+function $(id) { return document.getElementById(id); }
 
 function populateTeamSelects() {
   const awaySelect = $("away-select");
   const homeSelect = $("home-select");
-
   awaySelect.innerHTML = "";
   homeSelect.innerHTML = "";
-
   TEAMS.forEach((team, i) => {
     const opt1 = document.createElement("option");
-    opt1.value = i;
-    opt1.textContent = teamName(team);
+    opt1.value = i; opt1.textContent = teamName(team);
     awaySelect.appendChild(opt1);
-
     const opt2 = document.createElement("option");
-    opt2.value = i;
-    opt2.textContent = teamName(team);
+    opt2.value = i; opt2.textContent = teamName(team);
     homeSelect.appendChild(opt2);
   });
-
   awaySelect.value = 0;
   homeSelect.value = 1;
 }
@@ -313,7 +379,6 @@ function downDisplay(down, distance) {
 
 function updateUI() {
   if (!game) return;
-
   $("away-name").textContent = teamName(game.away);
   $("home-name").textContent = teamName(game.home);
   $("away-score").textContent = game.awayScore;
@@ -322,7 +387,6 @@ function updateUI() {
   $("clock").textContent = clockDisplay(game.clockSeconds);
   $("down-distance").textContent = downDisplay(game.down, game.distance);
   $("field-pos").textContent = `Ball on ${fieldPosDisplay(game.yardLine)}`;
-
   const possTeam = game.possession === "home" ? game.home : game.away;
   $("possession-text").textContent = `Possession: ${teamName(possTeam)}`;
 
@@ -338,16 +402,14 @@ function updateUI() {
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.add("hidden"));
   $(id).classList.remove("hidden");
-
   document.querySelectorAll(".nav-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.screen === id);
   });
-
-  if (id === "standings-screen") {
-    renderStandings();
-  }
-  if (id === "awards-screen") {
-    renderAwards();
+  if (id === "standings-screen") renderStandings();
+  if (id === "awards-screen") renderAwards();
+  if (id === "rosters-screen") {
+    populateRosterSelect();
+    renderRoster(parseInt($("roster-team-select").value) || 0);
   }
 }
 
@@ -385,9 +447,7 @@ function flipField() {
 function finishGame() {
   if (!game || game.resultRecorded) return;
   game.resultRecorded = true;
-
   recordGameResult(game.home, game.away, game.homeScore, game.awayScore);
-
   alert(`Final Score\n${teamName(game.away)} ${game.awayScore}  -  ${game.homeScore} ${teamName(game.home)}\n\nStandings have been updated!`);
 }
 
@@ -396,7 +456,6 @@ function processPlay() {
 
   const playType = $("play-type").value;
   let yards = parseInt($("yards-input").value) || 0;
-
   const current = game.possession === "home" ? game.home : game.away;
   const other = game.possession === "home" ? game.away : game.home;
   const team = teamName(current);
@@ -404,115 +463,31 @@ function processPlay() {
   let timeUsed = 30;
 
   switch (playType) {
-    case "run":
-      description = `${team} run for ${yards} yards`;
-      game.yardLine += yards;
-      timeUsed = 35;
-      break;
-    case "pass_complete":
-      description = `${team} pass complete for ${yards} yards`;
-      game.yardLine += yards;
-      timeUsed = 28;
-      break;
-    case "pass_incomplete":
-      description = `${team} pass incomplete`;
-      timeUsed = 12;
-      yards = 0;
-      break;
-    case "sack":
-      description = `${team} sacked for a loss of ${Math.abs(yards)} yards`;
-      game.yardLine += yards;
-      timeUsed = 25;
-      break;
-    case "interception":
-      description = `INTERCEPTION by ${teamName(other)}!`;
-      switchPossession();
-      flipField();
-      timeUsed = 20;
-      break;
-    case "fumble":
-      description = `FUMBLE recovered by ${teamName(other)}!`;
-      switchPossession();
-      flipField();
-      timeUsed = 25;
-      break;
-    case "punt":
-      description = `${team} punts`;
-      switchPossession();
-      game.yardLine = 100 - (game.yardLine + 40);
-      if (game.yardLine < 1) game.yardLine = 20;
-      timeUsed = 15;
-      break;
-    case "fg_made":
-      description = `FIELD GOAL is GOOD! (+3 ${team})`;
-      if (game.possession === "home") game.homeScore += 3;
-      else game.awayScore += 3;
-      switchPossession();
-      game.yardLine = 25;
-      timeUsed = 10;
-      break;
-    case "fg_missed":
-      description = `Field goal is NO GOOD`;
-      switchPossession();
-      flipField();
-      timeUsed = 10;
-      break;
-    case "touchdown":
-      description = `TOUCHDOWN ${team}!!!`;
-      if (game.possession === "home") game.homeScore += 6;
-      else game.awayScore += 6;
-      timeUsed = 15;
-      break;
-    case "xp_good":
-      description = `Extra point is GOOD`;
-      if (game.possession === "home") game.homeScore += 1;
-      else game.awayScore += 1;
-      switchPossession();
-      game.yardLine = 25;
-      timeUsed = 5;
-      break;
-    case "xp_missed":
-      description = `Extra point is MISSED`;
-      switchPossession();
-      game.yardLine = 25;
-      timeUsed = 5;
-      break;
-    case "two_pt_good":
-      description = `2-POINT CONVERSION SUCCESSFUL!`;
-      if (game.possession === "home") game.homeScore += 2;
-      else game.awayScore += 2;
-      switchPossession();
-      game.yardLine = 25;
-      timeUsed = 8;
-      break;
-    case "two_pt_failed":
-      description = `2-point conversion FAILED`;
-      switchPossession();
-      game.yardLine = 25;
-      timeUsed = 8;
-      break;
-    case "safety":
-      description = `SAFETY! (+2 ${teamName(other)})`;
-      if (game.possession === "home") game.awayScore += 2;
-      else game.homeScore += 2;
-      switchPossession();
-      game.yardLine = 25;
-      timeUsed = 10;
-      break;
+    case "run": description = `${team} run for ${yards} yards`; game.yardLine += yards; timeUsed = 35; break;
+    case "pass_complete": description = `${team} pass complete for ${yards} yards`; game.yardLine += yards; timeUsed = 28; break;
+    case "pass_incomplete": description = `${team} pass incomplete`; timeUsed = 12; yards = 0; break;
+    case "sack": description = `${team} sacked for a loss of ${Math.abs(yards)} yards`; game.yardLine += yards; timeUsed = 25; break;
+    case "interception": description = `INTERCEPTION by ${teamName(other)}!`; switchPossession(); flipField(); timeUsed = 20; break;
+    case "fumble": description = `FUMBLE recovered by ${teamName(other)}!`; switchPossession(); flipField(); timeUsed = 25; break;
+    case "punt": description = `${team} punts`; switchPossession(); game.yardLine = 100 - (game.yardLine + 40); if (game.yardLine < 1) game.yardLine = 20; timeUsed = 15; break;
+    case "fg_made": description = `FIELD GOAL is GOOD! (+3 ${team})`; if (game.possession === "home") game.homeScore += 3; else game.awayScore += 3; switchPossession(); game.yardLine = 25; timeUsed = 10; break;
+    case "fg_missed": description = `Field goal is NO GOOD`; switchPossession(); flipField(); timeUsed = 10; break;
+    case "touchdown": description = `TOUCHDOWN ${team}!!!`; if (game.possession === "home") game.homeScore += 6; else game.awayScore += 6; timeUsed = 15; break;
+    case "xp_good": description = `Extra point is GOOD`; if (game.possession === "home") game.homeScore += 1; else game.awayScore += 1; switchPossession(); game.yardLine = 25; timeUsed = 5; break;
+    case "xp_missed": description = `Extra point is MISSED`; switchPossession(); game.yardLine = 25; timeUsed = 5; break;
+    case "two_pt_good": description = `2-POINT CONVERSION SUCCESSFUL!`; if (game.possession === "home") game.homeScore += 2; else game.awayScore += 2; switchPossession(); game.yardLine = 25; timeUsed = 8; break;
+    case "two_pt_failed": description = `2-point conversion FAILED`; switchPossession(); game.yardLine = 25; timeUsed = 8; break;
+    case "safety": description = `SAFETY! (+2 ${teamName(other)})`; if (game.possession === "home") game.awayScore += 2; else game.homeScore += 2; switchPossession(); game.yardLine = 25; timeUsed = 10; break;
   }
 
   if (["run", "pass_complete", "pass_incomplete", "sack"].includes(playType)) {
     if (yards >= game.distance) {
-      game.down = 1;
-      game.distance = 10;
-      description += " — FIRST DOWN!";
+      game.down = 1; game.distance = 10; description += " — FIRST DOWN!";
     } else {
-      game.down += 1;
-      game.distance -= yards;
+      game.down += 1; game.distance -= yards;
       if (game.down > 4) {
         description += " — TURNOVER ON DOWNS";
-        switchPossession();
-        flipField();
+        switchPossession(); flipField();
       }
     }
   }
@@ -532,20 +507,13 @@ window.addEventListener("DOMContentLoaded", () => {
   populateTeamSelects();
 
   document.querySelectorAll(".nav-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      showScreen(btn.dataset.screen);
-    });
+    btn.addEventListener("click", () => showScreen(btn.dataset.screen));
   });
 
   $("start-btn").addEventListener("click", () => {
     const awayIdx = parseInt($("away-select").value);
     const homeIdx = parseInt($("home-select").value);
-
-    if (awayIdx === homeIdx) {
-      alert("Home and Away teams must be different!");
-      return;
-    }
-
+    if (awayIdx === homeIdx) { alert("Home and Away teams must be different!"); return; }
     game = createNewGame(TEAMS[homeIdx], TEAMS[awayIdx]);
     updateUI();
     showScreen("game-screen");
@@ -581,5 +549,9 @@ window.addEventListener("DOMContentLoaded", () => {
       saveAwards(awards);
       renderAwards();
     }
+  });
+
+  $("roster-team-select").addEventListener("change", (e) => {
+    renderRoster(parseInt(e.target.value));
   });
 });
