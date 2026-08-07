@@ -12,6 +12,12 @@
     <header class="header">
       <h1>My Football League</h1>
       <p class="subtitle">Dice-based Football Game Logger</p>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <button class="nav-btn active" data-screen="setup-screen">Play Game</button>
+        <button class="nav-btn" data-screen="standings-screen">Standings</button>
+      </nav>
     </header>
 
     <!-- Team Selection Screen -->
@@ -96,6 +102,34 @@
       <div class="bottom-actions">
         <button id="end-game-btn" class="btn danger">End Game</button>
         <button id="new-game-btn" class="btn">New Game</button>
+      </div>
+    </div>
+
+    <!-- Standings Screen -->
+    <div id="standings-screen" class="screen hidden">
+      <div class="standings-header">
+        <h2>League Standings</h2>
+        <button id="reset-standings-btn" class="btn danger small">Reset Standings</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="standings-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Team</th>
+              <th>W</th>
+              <th>L</th>
+              <th>T</th>
+              <th>PCT</th>
+              <th>PF</th>
+              <th>PA</th>
+              <th>DIFF</th>
+            </tr>
+          </thead>
+          <tbody id="standings-body">
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
