@@ -19,7 +19,6 @@
         <button class="sidebar-btn active" data-screen="setup-screen">Play Game</button>
         <button class="sidebar-btn" data-screen="standings-screen">Standings</button>
         <button class="sidebar-btn" data-screen="awards-screen">Awards</button>
-        <button class="sidebar-btn" data-screen="teams-screen">Teams</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -127,17 +126,17 @@
       </div>
 
       <!-- Teams List -->
-      <div id="teams-screen" class="screen hidden">
         <h2>All Teams</h2>
         <div id="teams-grid" class="teams-grid"></div>
       </div>
 
       <!-- Individual Team Page -->
       <div id="team-page-screen" class="screen hidden">
-        <button id="back-to-teams" class="btn small back-btn">← Back to Teams</button>
+        <button id="back-to-standings" class="btn small back-btn">← Back to Standings</button>
 
         <div class="team-page-header">
           <h2 id="team-page-name">Team Name</h2>
+          <div id="team-page-rating">Overall: --</div>
           <div class="team-record" id="team-page-record">0-0-0</div>
         </div>
 
