@@ -1,0 +1,16 @@
+{
+  "name": "my-football-league",
+  "version": "1.0.0",
+  "description": "My Football League - Dice-based football game logger",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "keywords": ["football", "league", "electron"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
