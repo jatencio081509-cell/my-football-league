@@ -7,142 +7,173 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app">
-    <header class="header">
-      <h1>My Football League</h1>
-      <p class="subtitle">Dice-based Football Game Logger</p>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>MFL</h1>
+        <p>My Football League</p>
+      </div>
 
-      <nav class="nav">
-        <button class="nav-btn active" data-screen="setup-screen">Play Game</button>
-        <button class="nav-btn" data-screen="standings-screen">Standings</button>
-        <button class="nav-btn" data-screen="awards-screen">Awards</button>
-        <button class="nav-btn" data-screen="rosters-screen">Rosters</button>
+      <nav class="sidebar-nav">
+        <button class="sidebar-btn active" data-screen="setup-screen">Play Game</button>
+        <button class="sidebar-btn" data-screen="standings-screen">Standings</button>
+        <button class="sidebar-btn" data-screen="awards-screen">Awards</button>
+        <button class="sidebar-btn" data-screen="teams-screen">Teams</button>
       </nav>
-    </header>
 
-    <!-- Team Selection Screen -->
-    <div id="setup-screen" class="screen">
-      <h2>Start New Game</h2>
-      <div class="team-select-row">
-        <div class="team-select">
-          <label>Away Team</label>
-          <select id="away-select"></select>
-        </div>
-        <div class="vs">VS</div>
-        <div class="team-select">
-          <label>Home Team</label>
-          <select id="home-select"></select>
-        </div>
+      <div class="sidebar-footer">
+        <p>Dice League</p>
       </div>
-      <button id="start-btn" class="btn primary">Start Game</button>
-    </div>
+    </aside>
 
-    <!-- Game Screen -->
-    <div id="game-screen" class="screen hidden">
-      <div class="scoreboard">
-        <div class="team-score away">
-          <div class="team-name" id="away-name">Away</div>
-          <div class="score" id="away-score">0</div>
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Play Game -->
+      <div id="setup-screen" class="screen">
+        <h2>Start New Game</h2>
+        <div class="team-select-row">
+          <div class="team-select">
+            <label>Away Team</label>
+            <select id="away-select"></select>
+          </div>
+          <div class="vs">VS</div>
+          <div class="team-select">
+            <label>Home Team</label>
+            <select id="home-select"></select>
+          </div>
         </div>
-        <div class="game-info">
-          <div class="quarter" id="quarter">Q1</div>
-          <div class="clock" id="clock">15:00</div>
-          <div class="down-distance" id="down-distance">1st & 10</div>
-          <div class="field-pos" id="field-pos">Ball on Own 25</div>
-        </div>
-        <div class="team-score home">
-          <div class="team-name" id="home-name">Home</div>
-          <div class="score" id="home-score">0</div>
-        </div>
+        <button id="start-btn" class="btn primary">Start Game</button>
       </div>
-      <div class="possession" id="possession-text">Possession: Home Team</div>
-      <div class="play-entry">
-        <h3>Enter Play</h3>
-        <div class="play-controls">
-          <select id="play-type">
-            <option value="run">Run</option>
-            <option value="pass_complete">Pass Complete</option>
-            <option value="pass_incomplete">Pass Incomplete</option>
-            <option value="sack">Sack</option>
-            <option value="interception">Interception</option>
-            <option value="fumble">Fumble</option>
-            <option value="punt">Punt</option>
-            <option value="fg_made">Field Goal (Made)</option>
-            <option value="fg_missed">Field Goal (Missed)</option>
-            <option value="touchdown">Touchdown</option>
-            <option value="xp_good">Extra Point (Good)</option>
-            <option value="xp_missed">Extra Point (Missed)</option>
-            <option value="two_pt_good">2-Point Conversion (Good)</option>
-            <option value="two_pt_failed">2-Point Conversion (Failed)</option>
-            <option value="safety">Safety</option>
-          </select>
-          <input type="number" id="yards-input" placeholder="Yards" value="0">
-          <button id="submit-play" class="btn primary">Submit Play</button>
-        </div>
-      </div>
-      <div class="play-log">
-        <h3>Play-by-Play</h3>
-        <div id="log-content" class="log-content"></div>
-      </div>
-      <div class="bottom-actions">
-        <button id="end-game-btn" class="btn danger">End Game</button>
-        <button id="new-game-btn" class="btn">New Game</button>
-      </div>
-    </div>
 
-    <!-- Standings Screen -->
-    <div id="standings-screen" class="screen hidden">
-      <div class="standings-header">
-        <h2>League Standings</h2>
-        <button id="reset-standings-btn" class="btn danger small">Reset Standings</button>
+      <!-- Live Game -->
+      <div id="game-screen" class="screen hidden">
+        <div class="scoreboard">
+          <div class="team-score away">
+            <div class="team-name" id="away-name">Away</div>
+            <div class="score" id="away-score">0</div>
+          </div>
+          <div class="game-info">
+            <div class="quarter" id="quarter">Q1</div>
+            <div class="clock" id="clock">15:00</div>
+            <div class="down-distance" id="down-distance">1st & 10</div>
+            <div class="field-pos" id="field-pos">Ball on Own 25</div>
+          </div>
+          <div class="team-score home">
+            <div class="team-name" id="home-name">Home</div>
+            <div class="score" id="home-score">0</div>
+          </div>
+        </div>
+        <div class="possession" id="possession-text">Possession: Home Team</div>
+        <div class="play-entry">
+          <h3>Enter Play</h3>
+          <div class="play-controls">
+            <select id="play-type">
+              <option value="run">Run</option>
+              <option value="pass_complete">Pass Complete</option>
+              <option value="pass_incomplete">Pass Incomplete</option>
+              <option value="sack">Sack</option>
+              <option value="interception">Interception</option>
+              <option value="fumble">Fumble</option>
+              <option value="punt">Punt</option>
+              <option value="fg_made">Field Goal (Made)</option>
+              <option value="fg_missed">Field Goal (Missed)</option>
+              <option value="touchdown">Touchdown</option>
+              <option value="xp_good">Extra Point (Good)</option>
+              <option value="xp_missed">Extra Point (Missed)</option>
+              <option value="two_pt_good">2-Point Conversion (Good)</option>
+              <option value="two_pt_failed">2-Point Conversion (Failed)</option>
+              <option value="safety">Safety</option>
+            </select>
+            <input type="number" id="yards-input" placeholder="Yards" value="0">
+            <button id="submit-play" class="btn primary">Submit Play</button>
+          </div>
+        </div>
+        <div class="play-log">
+          <h3>Play-by-Play</h3>
+          <div id="log-content" class="log-content"></div>
+        </div>
+        <div class="bottom-actions">
+          <button id="end-game-btn" class="btn danger">End Game</button>
+          <button id="new-game-btn" class="btn">New Game</button>
+        </div>
       </div>
-      <div class="table-wrapper">
-        <table class="standings-table">
-          <thead>
-            <tr>
-              <th>#</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th>
-            </tr>
-          </thead>
-          <tbody id="standings-body"></tbody>
-        </table>
-      </div>
-    </div>
 
-    <!-- Awards Screen -->
-    <div id="awards-screen" class="screen hidden">
-      <div class="standings-header">
-        <h2>League Awards</h2>
-        <button id="reset-awards-btn" class="btn danger small">Reset Awards</button>
+      <!-- Standings -->
+      <div id="standings-screen" class="screen hidden">
+        <div class="standings-header">
+          <h2>League Standings</h2>
+          <button id="reset-standings-btn" class="btn danger small">Reset Standings</button>
+        </div>
+        <div class="table-wrapper">
+          <table class="standings-table">
+            <thead>
+              <tr>
+                <th>#</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th>
+              </tr>
+            </thead>
+            <tbody id="standings-body"></tbody>
+          </table>
+        </div>
       </div>
-      <div id="awards-list" class="awards-list"></div>
-    </div>
 
-    <!-- Rosters Screen -->
-    <div id="rosters-screen" class="screen hidden">
-      <div class="standings-header">
-        <h2>Team Rosters</h2>
+      <!-- Awards -->
+      <div id="awards-screen" class="screen hidden">
+        <div class="standings-header">
+          <h2>League Awards</h2>
+          <button id="reset-awards-btn" class="btn danger small">Reset Awards</button>
+        </div>
+        <div id="awards-list" class="awards-list"></div>
       </div>
-      <div class="roster-controls">
-        <label>Select Team:</label>
-        <select id="roster-team-select"></select>
+
+      <!-- Teams List -->
+      <div id="teams-screen" class="screen hidden">
+        <h2>All Teams</h2>
+        <div id="teams-grid" class="teams-grid"></div>
       </div>
-      <div class="table-wrapper">
-        <table class="standings-table roster-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Pos</th>
-              <th>Age</th>
-              <th>Height</th>
-              <th>Weight</th>
-              <th>Rating</th>
-            </tr>
-          </thead>
-          <tbody id="roster-body"></tbody>
-        </table>
+
+      <!-- Individual Team Page -->
+      <div id="team-page-screen" class="screen hidden">
+        <button id="back-to-teams" class="btn small back-btn">← Back to Teams</button>
+
+        <div class="team-page-header">
+          <h2 id="team-page-name">Team Name</h2>
+          <div class="team-record" id="team-page-record">0-0-0</div>
+        </div>
+
+        <div class="team-page-section">
+          <h3>Standing</h3>
+          <div id="team-page-standing" class="team-standing-box">—</div>
+        </div>
+
+        <div class="team-page-section">
+          <h3>Upcoming Games</h3>
+          <div id="team-page-upcoming" class="upcoming-box">
+            <p class="empty-note">Season schedule coming soon.</p>
+          </div>
+        </div>
+
+        <div class="team-page-section">
+          <h3>Roster</h3>
+          <div class="table-wrapper">
+            <table class="standings-table roster-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Pos</th>
+                  <th>Age</th>
+                  <th>Height</th>
+                  <th>Weight</th>
+                  <th>Rating</th>
+                </tr>
+              </thead>
+              <tbody id="team-page-roster"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
   </div>
 
   <script src="renderer.js"></script>
