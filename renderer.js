@@ -146,6 +146,103 @@ function renderStandings() {
 }
 
 // ============================================
+// AWARDS
+// ============================================
+const AWARD_DEFINITIONS = [
+  { id: "mvp", title: "League MVP" },
+  { id: "offensive_poy", title: "Offensive Player of the Year" },
+  { id: "defensive_poy", title: "Defensive Player of the Year" },
+  { id: "rookie", title: "Rookie of the Year" },
+  { id: "coach", title: "Coach of the Year" },
+  { id: "comeback", title: "Comeback Player of the Year" },
+  { id: "most_improved", title: "Most Improved Player" },
+  { id: "best_qb", title: "Best Quarterback" },
+  { id: "best_rb", title: "Best Running Back" },
+  { id: "best_wr", title: "Best Wide Receiver" },
+  { id: "best_defense", title: "Best Defense" },
+];
+
+function createEmptyAwards() {
+  const awards = {};
+  AWARD_DEFINITIONS.forEach(a => {
+    awards[a.id] = { player: "", teamKey: "" };
+  });
+  return awards;
+}
+
+function loadAwards() {
+  const saved = localStorage.getItem("mfl-awards");
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return createEmptyAwards();
+    }
+  }
+  return createEmptyAwards();
+}
+
+function saveAwards(awards) {
+  localStorage.setItem("mfl-awards", JSON.stringify(awards));
+}
+
+let awards = loadAwards();
+
+function renderAwards() {
+  const container = $("awards-list");
+  container.innerHTML = "";
+
+  AWARD_DEFINITIONS.forEach(def => {
+    const current = awards[def.id] || { player: "", teamKey: "" };
+    const team = TEAMS.find(t => teamKey(t) === current.teamKey);
+    const hasWinner = current.player || current.teamKey;
+
+    const card = document.createElement("div");
+    card.className = "award-card";
+
+    let winnerText = "Not yet awarded";
+    if (hasWinner) {
+      if (def.id === "best_defense" || def.id === "coach") {
+        winnerText = team ? teamName(team) : current.player || "Unknown";
+      } else {
+        winnerText = `${current.player || "Unknown"}${team ? " – " + teamName(team) : ""}`;
+      }
+    }
+
+    card.innerHTML = `
+      <div class="award-title">${def.title}</div>
+      <div class="award-winner ${hasWinner ? "" : "empty"}">${winnerText}</div>
+      <div class="award-form">
+        <input type="text" placeholder="Player name" value="${current.player || ""}" data-award="${def.id}" class="award-player-input">
+        <select data-award="${def.id}" class="award-team-select">
+          <option value="">– Select Team –</option>
+          ${TEAMS.map(t => `<option value="${teamKey(t)}" ${current.teamKey === teamKey(t) ? "selected" : ""}>${teamName(t)}</option>`).join("")}
+        </select>
+        <button class="btn primary small award-save-btn" data-award="${def.id}">Save</button>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  // Attach save listeners
+  document.querySelectorAll(".award-save-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.award;
+      const playerInput = document.querySelector(`.award-player-input[data-award="${id}"]`);
+      const teamSelect = document.querySelector(`.award-team-select[data-award="${id}"]`);
+
+      awards[id] = {
+        player: playerInput.value.trim(),
+        teamKey: teamSelect.value
+      };
+      saveAwards(awards);
+      renderAwards();
+    });
+  });
+}
+
+// ============================================
 // GAME STATE
 // ============================================
 let game = null;
@@ -248,6 +345,9 @@ function showScreen(id) {
 
   if (id === "standings-screen") {
     renderStandings();
+  }
+  if (id === "awards-screen") {
+    renderAwards();
   }
 }
 
@@ -472,6 +572,14 @@ window.addEventListener("DOMContentLoaded", () => {
       standings = createEmptyStandings();
       saveStandings(standings);
       renderStandings();
+    }
+  });
+
+  $("reset-awards-btn").addEventListener("click", () => {
+    if (confirm("Are you sure you want to clear all awards?")) {
+      awards = createEmptyAwards();
+      saveAwards(awards);
+      renderAwards();
     }
   });
 });
