@@ -17,6 +17,7 @@
       <nav class="nav">
         <button class="nav-btn active" data-screen="setup-screen">Play Game</button>
         <button class="nav-btn" data-screen="standings-screen">Standings</button>
+        <button class="nav-btn" data-screen="awards-screen">Awards</button>
       </nav>
     </header>
 
@@ -130,6 +131,18 @@
           <tbody id="standings-body">
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Awards Screen -->
+    <div id="awards-screen" class="screen hidden">
+      <div class="standings-header">
+        <h2>League Awards</h2>
+        <button id="reset-awards-btn" class="btn danger small">Reset Awards</button>
+      </div>
+
+      <div id="awards-list" class="awards-list">
+        <!-- Awards will be rendered here -->
       </div>
     </div>
   </div>
