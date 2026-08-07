@@ -34,7 +34,6 @@ body {
   margin-bottom: 16px;
 }
 
-/* Navigation */
 .nav {
   display: flex;
   justify-content: center;
@@ -81,7 +80,6 @@ h2, h3 {
   color: #f1f5f9;
 }
 
-/* Team Selection */
 .team-select-row {
   display: flex;
   align-items: center;
@@ -118,7 +116,6 @@ h2, h3 {
   color: #38bdf8;
 }
 
-/* Buttons */
 .btn {
   padding: 10px 22px;
   border: none;
@@ -162,7 +159,6 @@ h2, h3 {
   font-size: 1.1rem;
 }
 
-/* Scoreboard */
 .scoreboard {
   display: flex;
   justify-content: space-between;
@@ -221,7 +217,6 @@ h2, h3 {
   color: #7dd3fc;
 }
 
-/* Play Entry */
 .play-entry {
   margin-bottom: 25px;
 }
@@ -251,7 +246,6 @@ h2, h3 {
   width: 100px;
 }
 
-/* Play Log */
 .play-log {
   margin-bottom: 20px;
 }
@@ -281,7 +275,6 @@ h2, h3 {
   justify-content: center;
 }
 
-/* Standings */
 .standings-header {
   display: flex;
   justify-content: space-between;
@@ -340,7 +333,6 @@ h2, h3 {
   color: #f87171;
 }
 
-/* Awards */
 .awards-list {
   display: flex;
   flex-direction: column;
@@ -395,4 +387,39 @@ h2, h3 {
 
 .award-form select {
   min-width: 180px;
+}
+
+/* Rosters */
+.roster-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.roster-controls label {
+  color: #94a3b8;
+}
+
+.roster-controls select {
+  padding: 10px 14px;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-width: 260px;
+}
+
+.roster-table .rating-high {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.roster-table .rating-mid {
+  color: #fbbf24;
+}
+
+.roster-table .rating-low {
+  color: #94a3b8;
 }
