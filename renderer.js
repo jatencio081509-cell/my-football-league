@@ -40,6 +40,111 @@ function teamName(team) {
   return `${team.city} ${team.name}`;
 }
 
+function teamKey(team) {
+  return `${team.city}-${team.name}`;
+}
+
+// ============================================
+// STANDINGS
+// ============================================
+function createEmptyStandings() {
+  const standings = {};
+  TEAMS.forEach(team => {
+    standings[teamKey(team)] = {
+      team,
+      wins: 0,
+      losses: 0,
+      ties: 0,
+      pf: 0,
+      pa: 0
+    };
+  });
+  return standings;
+}
+
+function loadStandings() {
+  const saved = localStorage.getItem("mfl-standings");
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return createEmptyStandings();
+    }
+  }
+  return createEmptyStandings();
+}
+
+function saveStandings(standings) {
+  localStorage.setItem("mfl-standings", JSON.stringify(standings));
+}
+
+let standings = loadStandings();
+
+function recordGameResult(homeTeam, awayTeam, homeScore, awayScore) {
+  const homeKey = teamKey(homeTeam);
+  const awayKey = teamKey(awayTeam);
+
+  if (!standings[homeKey]) standings[homeKey] = { team: homeTeam, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
+  if (!standings[awayKey]) standings[awayKey] = { team: awayTeam, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
+
+  standings[homeKey].pf += homeScore;
+  standings[homeKey].pa += awayScore;
+  standings[awayKey].pf += awayScore;
+  standings[awayKey].pa += homeScore;
+
+  if (homeScore > awayScore) {
+    standings[homeKey].wins += 1;
+    standings[awayKey].losses += 1;
+  } else if (awayScore > homeScore) {
+    standings[awayKey].wins += 1;
+    standings[homeKey].losses += 1;
+  } else {
+    standings[homeKey].ties += 1;
+    standings[awayKey].ties += 1;
+  }
+
+  saveStandings(standings);
+}
+
+function getSortedStandings() {
+  return Object.values(standings).sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    const diffA = a.pf - a.pa;
+    const diffB = b.pf - b.pa;
+    if (diffB !== diffA) return diffB - diffA;
+    return b.pf - a.pf;
+  });
+}
+
+function renderStandings() {
+  const tbody = $("standings-body");
+  tbody.innerHTML = "";
+
+  const sorted = getSortedStandings();
+
+  sorted.forEach((row, index) => {
+    const gamesPlayed = row.wins + row.losses + row.ties;
+    const pct = gamesPlayed === 0 ? ".000" : (row.wins / gamesPlayed).toFixed(3).replace(/^0/, "");
+    const diff = row.pf - row.pa;
+    const diffClass = diff > 0 ? "positive" : diff < 0 ? "negative" : "";
+    const diffText = diff > 0 ? `+${diff}` : `${diff}`;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="rank">${index + 1}</td>
+      <td class="team-cell">${teamName(row.team)}</td>
+      <td>${row.wins}</td>
+      <td>${row.losses}</td>
+      <td>${row.ties}</td>
+      <td>${pct}</td>
+      <td>${row.pf}</td>
+      <td>${row.pa}</td>
+      <td class="${diffClass}">${diffText}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
 // ============================================
 // GAME STATE
 // ============================================
@@ -53,12 +158,13 @@ function createNewGame(home, away) {
     awayScore: 0,
     quarter: 1,
     clockSeconds: 15 * 60,
-    possession: "home", // home or away
+    possession: "home",
     down: 1,
     distance: 10,
     yardLine: 25,
     playLog: [`Game started: ${teamName(away)} at ${teamName(home)}`, "Kickoff — ball at the 25"],
-    gameOver: false
+    gameOver: false,
+    resultRecorded: false
   };
 }
 
@@ -73,6 +179,9 @@ function populateTeamSelects() {
   const awaySelect = $("away-select");
   const homeSelect = $("home-select");
 
+  awaySelect.innerHTML = "";
+  homeSelect.innerHTML = "";
+
   TEAMS.forEach((team, i) => {
     const opt1 = document.createElement("option");
     opt1.value = i;
@@ -85,7 +194,6 @@ function populateTeamSelects() {
     homeSelect.appendChild(opt2);
   });
 
-  // Default to different teams
   awaySelect.value = 0;
   homeSelect.value = 1;
 }
@@ -121,7 +229,6 @@ function updateUI() {
   const possTeam = game.possession === "home" ? game.home : game.away;
   $("possession-text").textContent = `Possession: ${teamName(possTeam)}`;
 
-  // Play log
   const log = $("log-content");
   log.innerHTML = "";
   game.playLog.slice().reverse().forEach(entry => {
@@ -132,9 +239,16 @@ function updateUI() {
 }
 
 function showScreen(id) {
-  $("setup-screen").classList.add("hidden");
-  $("game-screen").classList.add("hidden");
+  document.querySelectorAll(".screen").forEach(s => s.classList.add("hidden"));
   $(id).classList.remove("hidden");
+
+  document.querySelectorAll(".nav-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.screen === id);
+  });
+
+  if (id === "standings-screen") {
+    renderStandings();
+  }
 }
 
 // ============================================
@@ -147,6 +261,7 @@ function applyTime(seconds) {
     if (game.quarter >= 4) {
       game.gameOver = true;
       game.playLog.push("*** END OF GAME ***");
+      finishGame();
     } else {
       game.quarter += 1;
       game.clockSeconds = 15 * 60;
@@ -165,6 +280,15 @@ function flipField() {
   game.yardLine = 100 - game.yardLine;
   if (game.yardLine < 1) game.yardLine = 20;
   if (game.yardLine > 99) game.yardLine = 80;
+}
+
+function finishGame() {
+  if (!game || game.resultRecorded) return;
+  game.resultRecorded = true;
+
+  recordGameResult(game.home, game.away, game.homeScore, game.awayScore);
+
+  alert(`Final Score\n${teamName(game.away)} ${game.awayScore}  -  ${game.homeScore} ${teamName(game.home)}\n\nStandings have been updated!`);
 }
 
 function processPlay() {
@@ -197,7 +321,7 @@ function processPlay() {
       break;
     case "sack":
       description = `${team} sacked for a loss of ${Math.abs(yards)} yards`;
-      game.yardLine += yards; // should be negative
+      game.yardLine += yards;
       timeUsed = 25;
       break;
     case "interception":
@@ -277,7 +401,6 @@ function processPlay() {
       break;
   }
 
-  // Update downs for normal offensive plays
   if (["run", "pass_complete", "pass_incomplete", "sack"].includes(playType)) {
     if (yards >= game.distance) {
       game.down = 1;
@@ -294,17 +417,12 @@ function processPlay() {
     }
   }
 
-  // Keep yard line in bounds
   if (game.yardLine < 0) game.yardLine = 0;
   if (game.yardLine > 100) game.yardLine = 100;
 
   game.playLog.push(description);
   applyTime(timeUsed);
   updateUI();
-
-  if (game.gameOver) {
-    alert(`Final Score\n${teamName(game.away)} ${game.awayScore}  -  ${game.homeScore} ${teamName(game.home)}`);
-  }
 }
 
 // ============================================
@@ -312,6 +430,12 @@ function processPlay() {
 // ============================================
 window.addEventListener("DOMContentLoaded", () => {
   populateTeamSelects();
+
+  document.querySelectorAll(".nav-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      showScreen(btn.dataset.screen);
+    });
+  });
 
   $("start-btn").addEventListener("click", () => {
     const awayIdx = parseInt($("away-select").value);
@@ -330,16 +454,24 @@ window.addEventListener("DOMContentLoaded", () => {
   $("submit-play").addEventListener("click", processPlay);
 
   $("end-game-btn").addEventListener("click", () => {
-    if (game) {
+    if (game && !game.gameOver) {
       game.gameOver = true;
       game.playLog.push("Game ended early.");
       updateUI();
-      alert(`Final Score\n${teamName(game.away)} ${game.awayScore}  -  ${game.homeScore} ${teamName(game.home)}`);
+      finishGame();
     }
   });
 
   $("new-game-btn").addEventListener("click", () => {
     game = null;
     showScreen("setup-screen");
+  });
+
+  $("reset-standings-btn").addEventListener("click", () => {
+    if (confirm("Are you sure you want to reset all standings to 0-0?")) {
+      standings = createEmptyStandings();
+      saveStandings(standings);
+      renderStandings();
+    }
   });
 });
