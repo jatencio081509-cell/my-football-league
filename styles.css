@@ -40,6 +40,7 @@ body {
   justify-content: center;
   gap: 10px;
   margin-top: 12px;
+  flex-wrap: wrap;
 }
 
 .nav-btn {
@@ -337,4 +338,61 @@ h2, h3 {
 
 .standings-table .negative {
   color: #f87171;
+}
+
+/* Awards */
+.awards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.award-card {
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.award-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.award-winner {
+  font-size: 1.05rem;
+  color: #f1f5f9;
+}
+
+.award-winner.empty {
+  color: #64748b;
+  font-style: italic;
+}
+
+.award-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.award-form input,
+.award-form select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 0.95rem;
+}
+
+.award-form input {
+  min-width: 160px;
+}
+
+.award-form select {
+  min-width: 180px;
 }
