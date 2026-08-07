@@ -2,38 +2,38 @@
 // TEAM DATA
 // ============================================
 const TEAMS = [
-  { city: "Boston", name: "Oceans", state: "MA" },
-  { city: "Denver", name: "Mountaineers", state: "CO" },
-  { city: "Louisville", name: "Chickens", state: "KY" },
-  { city: "Honolulu", name: "Stars", state: "HI" },
-  { city: "Austin", name: "Bullriders", state: "TX" },
-  { city: "New York", name: "Emperors", state: "NY" },
-  { city: "Buffalo", name: "Beavers", state: "NY" },
-  { city: "Portland", name: "Wildcats", state: "OR" },
-  { city: "Oklahoma City", name: "Brawlers", state: "OK" },
-  { city: "Detroit", name: "Wolverines", state: "MI" },
-  { city: "Minneapolis", name: "Lakers", state: "MN" },
-  { city: "Washington", name: "Presidents", state: "DC" },
-  { city: "Huntsville", name: "Rockets", state: "AL" },
-  { city: "Anchorage", name: "Snowcaps", state: "AK" },
-  { city: "New Orleans", name: "Pelicans", state: "LA" },
-  { city: "Salt Lake City", name: "Bees", state: "UT" },
-  { city: "Burlington", name: "Foresters", state: "VT" },
-  { city: "Sacramento", name: "Goldnuggets", state: "CA" },
-  { city: "Los Angeles", name: "Rangers", state: "CA" },
-  { city: "Miami", name: "Billionaires", state: "FL" },
-  { city: "Houston", name: "Flyers", state: "TX" },
-  { city: "Billings", name: "Pirates", state: "MT" },
-  { city: "Lincoln", name: "Cornhusks", state: "NE" },
-  { city: "Madison", name: "Badgers", state: "WI" },
-  { city: "Cheyenne", name: "Towers", state: "WY" },
-  { city: "Las Vegas", name: "Bluejays", state: "NV" },
-  { city: "Manchester", name: "Finches", state: "NH" },
-  { city: "Jackson", name: "Magnolias", state: "MS" },
-  { city: "Kansas City", name: "Borders", state: "MO" },
-  { city: "Indianapolis", name: "Racers", state: "IN" },
-  { city: "Seattle", name: "Tree Bearers", state: "WA" },
-  { city: "Charleston", name: "Cardinals", state: "WV" },
+  { city: "Boston", name: "Oceans", state: "MA", conference: "AFC", division: "East" },
+  { city: "Denver", name: "Mountaineers", state: "CO", conference: "AFC", division: "West" },
+  { city: "Louisville", name: "Chickens", state: "KY", conference: "NFC", division: "East" },
+  { city: "Honolulu", name: "Stars", state: "HI", conference: "NFC", division: "South" },
+  { city: "Austin", name: "Bullriders", state: "TX", conference: "AFC", division: "South" },
+  { city: "New York", name: "Emperors", state: "NY", conference: "NFC", division: "East" },
+  { city: "Buffalo", name: "Beavers", state: "NY", conference: "AFC", division: "East" },
+  { city: "Portland", name: "Wildcats", state: "OR", conference: "NFC", division: "North" },
+  { city: "Oklahoma City", name: "Brawlers", state: "OK", conference: "NFC", division: "South" },
+  { city: "Detroit", name: "Wolverines", state: "MI", conference: "NFC", division: "North" },
+  { city: "Minneapolis", name: "Lakers", state: "MN", conference: "AFC", division: "North" },
+  { city: "Washington", name: "Presidents", state: "DC", conference: "NFC", division: "East" },
+  { city: "Huntsville", name: "Rockets", state: "AL", conference: "AFC", division: "South" },
+  { city: "Anchorage", name: "Snowcaps", state: "AK", conference: "AFC", division: "North" },
+  { city: "New Orleans", name: "Pelicans", state: "LA", conference: "NFC", division: "South" },
+  { city: "Salt Lake City", name: "Bees", state: "UT", conference: "NFC", division: "West" },
+  { city: "Burlington", name: "Foresters", state: "VT", conference: "AFC", division: "East" },
+  { city: "Sacramento", name: "Goldnuggets", state: "CA", conference: "AFC", division: "South" },
+  { city: "Los Angeles", name: "Rangers", state: "CA", conference: "NFC", division: "West" },
+  { city: "Miami", name: "Billionaires", state: "FL", conference: "AFC", division: "West" },
+  { city: "Houston", name: "Flyers", state: "TX", conference: "NFC", division: "South" },
+  { city: "Billings", name: "Pirates", state: "MT", conference: "NFC", division: "North" },
+  { city: "Lincoln", name: "Cornhusks", state: "NE", conference: "AFC", division: "West" },
+  { city: "Madison", name: "Badgers", state: "WI", conference: "NFC", division: "North" },
+  { city: "Cheyenne", name: "Towers", state: "WY", conference: "NFC", division: "West" },
+  { city: "Las Vegas", name: "Bluejays", state: "NV", conference: "AFC", division: "West" },
+  { city: "Manchester", name: "Finches", state: "NH", conference: "AFC", division: "North" },
+  { city: "Jackson", name: "Magnolias", state: "MS", conference: "AFC", division: "South" },
+  { city: "Kansas City", name: "Borders", state: "MO", conference: "NFC", division: "West" },
+  { city: "Indianapolis", name: "Racers", state: "IN", conference: "NFC", division: "East" },
+  { city: "Seattle", name: "Tree Bearers", state: "WA", conference: "AFC", division: "North" },
+  { city: "Charleston", name: "Cardinals", state: "WV", conference: "AFC", division: "East" },
 ];
 
 function teamName(team) {
@@ -105,6 +105,19 @@ function generateRosters() {
 }
 
 const ROSTERS = generateRosters();
+
+function getTeamOverall(team){
+    const players = ROSTERS[teamKey(team)] || [];
+
+    if(players.length === 0) return 0;
+
+    const total = players.reduce(
+        (sum, player)=>sum + player.rating,
+        0
+    );
+
+    return Math.round(total / players.length);
+}
 
 // ============================================
 // STANDINGS
