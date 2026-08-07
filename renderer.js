@@ -56,7 +56,7 @@ function mulberry32(a) {
   };
 }
 
-const FIRST_NAMES = ["James","John","Robert","Michael","David","William","Richard","Joseph","Thomas","Christopher","Charles","Daniel","Matthew","Anthony","Mark","Donald","Steven","Paul","Andrew","Joshua","Kenneth","Kevin","Brian","George","Timothy","Ronald","Edward","Jason","Jeffrey","Ryan","Jacob","Gary","Nicholas","Eric","Jonathan","Stephen","Larry","Justin","Scott","Brandon","Benjamin","Samuel","Raymond","Gregory","Frank","Alexander","Patrick","Jack","Dennis","Jerry","Tyler","Aaron","Jose","Adam","Nathan","Henry","Douglas","Zachary","Peter","Kyle","Noah","Ethan","Jeremy","Walter","Christian","Keith","Roger","Terry","Austin","Sean","Gerald","Carl","Harold","Dylan","Jesse","Bryan","Billy","Jordan","Albert","Jesse","Bruce","Gabriel","Logan","Alan","Juan","Wayne","Ralph","Roy","Eugene","Randy","Vincent","Russell","Louis","Philip","Bobby","Johnny","Bradley"];
+const FIRST_NAMES = ["James","John","Robert","Michael","David","William","Richard","Joseph","Thomas","Christopher","Charles","Daniel","Matthew","Anthony","Mark","Donald","Steven","Paul","Andrew","Joshua","Kenneth","Kevin","Brian","George","Timothy","Ronald","Edward","Jason","Jeffrey","Ryan","Jacob","Gary","Nicholas","Eric","Jonathan","Stephen","Larry","Justin","Scott","Brandon","Benjamin","Samuel","Raymond","Gregory","Frank","Alexander","Patrick","Jack","Dennis","Jerry","Tyler","Aaron","Jose","Adam","Nathan","Henry","Douglas","Zachary","Peter","Kyle","Noah","Ethan","Jeremy","Walter","Christian","Keith","Roger","Terry","Austin","Sean","Gerald","Carl","Harold","Dylan","Jesse","Bryan","Billy","Jordan","Albert","Bruce","Gabriel","Logan","Alan","Juan","Wayne","Ralph","Roy","Eugene","Randy","Vincent","Russell","Louis","Philip","Bobby","Johnny","Bradley"];
 
 const LAST_NAMES = ["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Rodriguez","Martinez","Hernandez","Lopez","Gonzalez","Wilson","Anderson","Thomas","Taylor","Moore","Jackson","Martin","Lee","Perez","Thompson","White","Harris","Sanchez","Clark","Ramirez","Lewis","Robinson","Walker","Young","Allen","King","Wright","Scott","Torres","Nguyen","Hill","Flores","Green","Adams","Nelson","Baker","Hall","Rivera","Campbell","Mitchell","Carter","Roberts","Gomez","Phillips","Evans","Turner","Diaz","Parker","Cruz","Edwards","Collins","Reyes","Stewart","Morris","Morales","Murphy","Cook","Rogers","Gutierrez","Ortiz","Morgan","Cooper","Peterson","Bailey","Reed","Kelly","Howard","Ramos","Kim","Cox","Ward","Richardson","Watson","Brooks","Chavez","Wood","James","Bennett","Gray","Mendoza","Ruiz","Hughes","Price","Alvarez","Castillo","Sanders","Patel","Myers","Long","Ross","Foster","Jimenez"];
 
@@ -82,40 +82,25 @@ function inchesToHeight(inches) {
 
 function generateRosters() {
   const allRosters = {};
-
   TEAMS.forEach((team, teamIndex) => {
     const rng = mulberry32(1000 + teamIndex * 97);
     const players = [];
-
     POSITIONS.forEach(slot => {
       for (let i = 0; i < slot.count; i++) {
         const first = FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)];
         const last = LAST_NAMES[Math.floor(rng() * LAST_NAMES.length)];
-        const age = 21 + Math.floor(rng() * 14); // 21-34
+        const age = 21 + Math.floor(rng() * 14);
         const heightIn = slot.hMin + Math.floor(rng() * (slot.hMax - slot.hMin + 1));
         const weight = slot.wMin + Math.floor(rng() * (slot.wMax - slot.wMin + 1));
-
-        // Rating: slightly higher chance of average players
         let rating = 55 + Math.floor(rng() * 35);
-        if (rng() > 0.85) rating = 80 + Math.floor(rng() * 15); // star chance
-        if (rng() > 0.95) rating = 92 + Math.floor(rng() * 7);  // elite chance
-
-        players.push({
-          name: `${first} ${last}`,
-          position: slot.pos,
-          age,
-          height: inchesToHeight(heightIn),
-          weight,
-          rating
-        });
+        if (rng() > 0.85) rating = 80 + Math.floor(rng() * 15);
+        if (rng() > 0.95) rating = 92 + Math.floor(rng() * 7);
+        players.push({ name: `${first} ${last}`, position: slot.pos, age, height: inchesToHeight(heightIn), weight, rating });
       }
     });
-
-    // Sort by rating descending so best players appear first
     players.sort((a, b) => b.rating - a.rating);
     allRosters[teamKey(team)] = players;
   });
-
   return allRosters;
 }
 
@@ -125,57 +110,38 @@ const ROSTERS = generateRosters();
 // STANDINGS
 // ============================================
 function createEmptyStandings() {
-  const standings = {};
-  TEAMS.forEach(team => {
-    standings[teamKey(team)] = { team, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
-  });
-  return standings;
+  const s = {};
+  TEAMS.forEach(team => { s[teamKey(team)] = { team, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 }; });
+  return s;
 }
 
 function loadStandings() {
   const saved = localStorage.getItem("mfl-standings");
-  if (saved) {
-    try { return JSON.parse(saved); } catch (e) { return createEmptyStandings(); }
-  }
+  if (saved) { try { return JSON.parse(saved); } catch (e) { return createEmptyStandings(); } }
   return createEmptyStandings();
 }
 
-function saveStandings(s) {
-  localStorage.setItem("mfl-standings", JSON.stringify(s));
-}
+function saveStandings(s) { localStorage.setItem("mfl-standings", JSON.stringify(s)); }
 
 let standings = loadStandings();
 
 function recordGameResult(homeTeam, awayTeam, homeScore, awayScore) {
   const homeKey = teamKey(homeTeam);
   const awayKey = teamKey(awayTeam);
-
   if (!standings[homeKey]) standings[homeKey] = { team: homeTeam, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
   if (!standings[awayKey]) standings[awayKey] = { team: awayTeam, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
-
-  standings[homeKey].pf += homeScore;
-  standings[homeKey].pa += awayScore;
-  standings[awayKey].pf += awayScore;
-  standings[awayKey].pa += homeScore;
-
-  if (homeScore > awayScore) {
-    standings[homeKey].wins += 1;
-    standings[awayKey].losses += 1;
-  } else if (awayScore > homeScore) {
-    standings[awayKey].wins += 1;
-    standings[homeKey].losses += 1;
-  } else {
-    standings[homeKey].ties += 1;
-    standings[awayKey].ties += 1;
-  }
+  standings[homeKey].pf += homeScore; standings[homeKey].pa += awayScore;
+  standings[awayKey].pf += awayScore; standings[awayKey].pa += homeScore;
+  if (homeScore > awayScore) { standings[homeKey].wins++; standings[awayKey].losses++; }
+  else if (awayScore > homeScore) { standings[awayKey].wins++; standings[homeKey].losses++; }
+  else { standings[homeKey].ties++; standings[awayKey].ties++; }
   saveStandings(standings);
 }
 
 function getSortedStandings() {
   return Object.values(standings).sort((a, b) => {
     if (b.wins !== a.wins) return b.wins - a.wins;
-    const diffA = a.pf - a.pa;
-    const diffB = b.pf - b.pa;
+    const diffA = a.pf - a.pa, diffB = b.pf - b.pa;
     if (diffB !== diffA) return diffB - diffA;
     return b.pf - a.pf;
   });
@@ -185,19 +151,12 @@ function renderStandings() {
   const tbody = $("standings-body");
   tbody.innerHTML = "";
   getSortedStandings().forEach((row, index) => {
-    const gamesPlayed = row.wins + row.losses + row.ties;
-    const pct = gamesPlayed === 0 ? ".000" : (row.wins / gamesPlayed).toFixed(3).replace(/^0/, "");
+    const gp = row.wins + row.losses + row.ties;
+    const pct = gp === 0 ? ".000" : (row.wins / gp).toFixed(3).replace(/^0/, "");
     const diff = row.pf - row.pa;
     const diffClass = diff > 0 ? "positive" : diff < 0 ? "negative" : "";
-    const diffText = diff > 0 ? `+${diff}` : `${diff}`;
-
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="rank">${index + 1}</td>
-      <td class="team-cell">${teamName(row.team)}</td>
-      <td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td>
-      <td>${pct}</td><td>${row.pf}</td><td>${row.pa}</td>
-      <td class="${diffClass}">${diffText}</td>`;
+    tr.innerHTML = `<td class="rank">${index + 1}</td><td class="team-cell">${teamName(row.team)}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td>${pct}</td><td>${row.pf}</td><td>${row.pa}</td><td class="${diffClass}">${diff > 0 ? "+" : ""}${diff}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -220,65 +179,45 @@ const AWARD_DEFINITIONS = [
 ];
 
 function createEmptyAwards() {
-  const awards = {};
-  AWARD_DEFINITIONS.forEach(a => { awards[a.id] = { player: "", teamKey: "" }; });
-  return awards;
+  const a = {};
+  AWARD_DEFINITIONS.forEach(d => { a[d.id] = { player: "", teamKey: "" }; });
+  return a;
 }
 
 function loadAwards() {
   const saved = localStorage.getItem("mfl-awards");
-  if (saved) {
-    try { return JSON.parse(saved); } catch (e) { return createEmptyAwards(); }
-  }
+  if (saved) { try { return JSON.parse(saved); } catch (e) { return createEmptyAwards(); } }
   return createEmptyAwards();
 }
 
-function saveAwards(a) {
-  localStorage.setItem("mfl-awards", JSON.stringify(a));
-}
+function saveAwards(a) { localStorage.setItem("mfl-awards", JSON.stringify(a)); }
 
 let awards = loadAwards();
 
 function renderAwards() {
   const container = $("awards-list");
   container.innerHTML = "";
-
   AWARD_DEFINITIONS.forEach(def => {
     const current = awards[def.id] || { player: "", teamKey: "" };
     const team = TEAMS.find(t => teamKey(t) === current.teamKey);
     const hasWinner = current.player || current.teamKey;
-
     let winnerText = "Not yet awarded";
     if (hasWinner) {
-      if (def.id === "best_defense" || def.id === "coach") {
-        winnerText = team ? teamName(team) : current.player || "Unknown";
-      } else {
-        winnerText = `${current.player || "Unknown"}${team ? " – " + teamName(team) : ""}`;
-      }
+      if (def.id === "best_defense" || def.id === "coach") winnerText = team ? teamName(team) : current.player || "Unknown";
+      else winnerText = `${current.player || "Unknown"}${team ? " – " + teamName(team) : ""}`;
     }
-
     const card = document.createElement("div");
     card.className = "award-card";
-    card.innerHTML = `
-      <div class="award-title">${def.title}</div>
-      <div class="award-winner ${hasWinner ? "" : "empty"}">${winnerText}</div>
-      <div class="award-form">
-        <input type="text" placeholder="Player name" value="${current.player || ""}" data-award="${def.id}" class="award-player-input">
-        <select data-award="${def.id}" class="award-team-select">
-          <option value="">– Select Team –</option>
-          ${TEAMS.map(t => `<option value="${teamKey(t)}" ${current.teamKey === teamKey(t) ? "selected" : ""}>${teamName(t)}</option>`).join("")}
-        </select>
-        <button class="btn primary small award-save-btn" data-award="${def.id}">Save</button>
-      </div>`;
+    card.innerHTML = `<div class="award-title">${def.title}</div><div class="award-winner ${hasWinner ? "" : "empty"}">${winnerText}</div><div class="award-form"><input type="text" placeholder="Player name" value="${current.player || ""}" data-award="${def.id}" class="award-player-input"><select data-award="${def.id}" class="award-team-select"><option value="">– Select Team –</option>${TEAMS.map(t => `<option value="${teamKey(t)}" ${current.teamKey === teamKey(t) ? "selected" : ""}>${teamName(t)}</option>`).join("")}</select><button class="btn primary small award-save-btn" data-award="${def.id}">Save</button></div>`;
     container.appendChild(card);
   });
-
   document.querySelectorAll(".award-save-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.award;
-      const playerInput = document.querySelector(`.award-player-input[data-award="${id}"]`);
-      const teamSelect = document.querySelector(`.award-team-select[data-award="${id}"]`);
-      awards[id] = { player: playerInput.value.trim(), teamKey: teamSelect.value };
+      awards[id] = {
+        player: document.querySelector(`.award-player-input[data-award="${id}"]`).value.trim(),
+        teamKey: document.querySelector(`.award-team-select[data-award="${id}"]`).value
+      };
       saveAwards(awards);
       renderAwards();
     });
@@ -286,41 +225,51 @@ function renderAwards() {
 }
 
 // ============================================
-// ROSTERS UI
+// TEAMS LIST + TEAM PAGE
 // ============================================
-function populateRosterSelect() {
-  const select = $("roster-team-select");
-  select.innerHTML = "";
+function renderTeamsGrid() {
+  const grid = $("teams-grid");
+  grid.innerHTML = "";
   TEAMS.forEach((team, i) => {
-    const opt = document.createElement("option");
-    opt.value = i;
-    opt.textContent = teamName(team);
-    select.appendChild(opt);
+    const key = teamKey(team);
+    const rec = standings[key] || { wins: 0, losses: 0, ties: 0 };
+    const card = document.createElement("div");
+    card.className = "team-card";
+    card.innerHTML = `<div class="team-card-name">${teamName(team)}</div><div class="team-card-record">${rec.wins}-${rec.losses}-${rec.ties}</div>`;
+    card.addEventListener("click", () => openTeamPage(i));
+    grid.appendChild(card);
   });
 }
 
-function renderRoster(teamIndex) {
+function openTeamPage(teamIndex) {
   const team = TEAMS[teamIndex];
-  const players = ROSTERS[teamKey(team)] || [];
-  const tbody = $("roster-body");
-  tbody.innerHTML = "";
+  const key = teamKey(team);
+  const rec = standings[key] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
+  const sorted = getSortedStandings();
+  const rank = sorted.findIndex(r => teamKey(r.team) === key) + 1;
 
+  $("team-page-name").textContent = teamName(team);
+  $("team-page-record").textContent = `${rec.wins}-${rec.losses}-${rec.ties}`;
+
+  const gp = rec.wins + rec.losses + rec.ties;
+  const pct = gp === 0 ? ".000" : (rec.wins / gp).toFixed(3).replace(/^0/, "");
+  const diff = rec.pf - rec.pa;
+  $("team-page-standing").textContent = `#${rank}  |  ${rec.wins}-${rec.losses}-${rec.ties}  |  PCT ${pct}  |  PF ${rec.pf}  PA ${rec.pa}  |  DIFF ${diff > 0 ? "+" : ""}${diff}`;
+
+  // Roster
+  const players = ROSTERS[key] || [];
+  const tbody = $("team-page-roster");
+  tbody.innerHTML = "";
   players.forEach((p, i) => {
     let ratingClass = "rating-low";
     if (p.rating >= 85) ratingClass = "rating-high";
     else if (p.rating >= 70) ratingClass = "rating-mid";
-
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="rank">${i + 1}</td>
-      <td class="team-cell">${p.name}</td>
-      <td>${p.position}</td>
-      <td>${p.age}</td>
-      <td>${p.height}</td>
-      <td>${p.weight}</td>
-      <td class="${ratingClass}">${p.rating}</td>`;
+    tr.innerHTML = `<td class="rank">${i + 1}</td><td class="team-cell">${p.name}</td><td>${p.position}</td><td>${p.age}</td><td>${p.height}</td><td>${p.weight}</td><td class="${ratingClass}">${p.rating}</td>`;
     tbody.appendChild(tr);
   });
+
+  showScreen("team-page-screen");
 }
 
 // ============================================
@@ -330,8 +279,7 @@ let game = null;
 
 function createNewGame(home, away) {
   return {
-    home, away,
-    homeScore: 0, awayScore: 0,
+    home, away, homeScore: 0, awayScore: 0,
     quarter: 1, clockSeconds: 15 * 60,
     possession: "home", down: 1, distance: 10, yardLine: 25,
     playLog: [`Game started: ${teamName(away)} at ${teamName(home)}`, "Kickoff — ball at the 25"],
@@ -347,18 +295,12 @@ function $(id) { return document.getElementById(id); }
 function populateTeamSelects() {
   const awaySelect = $("away-select");
   const homeSelect = $("home-select");
-  awaySelect.innerHTML = "";
-  homeSelect.innerHTML = "";
+  awaySelect.innerHTML = ""; homeSelect.innerHTML = "";
   TEAMS.forEach((team, i) => {
-    const opt1 = document.createElement("option");
-    opt1.value = i; opt1.textContent = teamName(team);
-    awaySelect.appendChild(opt1);
-    const opt2 = document.createElement("option");
-    opt2.value = i; opt2.textContent = teamName(team);
-    homeSelect.appendChild(opt2);
+    const o1 = document.createElement("option"); o1.value = i; o1.textContent = teamName(team); awaySelect.appendChild(o1);
+    const o2 = document.createElement("option"); o2.value = i; o2.textContent = teamName(team); homeSelect.appendChild(o2);
   });
-  awaySelect.value = 0;
-  homeSelect.value = 1;
+  awaySelect.value = 0; homeSelect.value = 1;
 }
 
 function clockDisplay(seconds) {
@@ -368,8 +310,7 @@ function clockDisplay(seconds) {
 }
 
 function fieldPosDisplay(yardLine) {
-  if (yardLine <= 50) return `Own ${yardLine}`;
-  return `Opponent ${100 - yardLine}`;
+  return yardLine <= 50 ? `Own ${yardLine}` : `Opponent ${100 - yardLine}`;
 }
 
 function downDisplay(down, distance) {
@@ -389,7 +330,6 @@ function updateUI() {
   $("field-pos").textContent = `Ball on ${fieldPosDisplay(game.yardLine)}`;
   const possTeam = game.possession === "home" ? game.home : game.away;
   $("possession-text").textContent = `Possession: ${teamName(possTeam)}`;
-
   const log = $("log-content");
   log.innerHTML = "";
   game.playLog.slice().reverse().forEach(entry => {
@@ -402,15 +342,16 @@ function updateUI() {
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.add("hidden"));
   $(id).classList.remove("hidden");
-  document.querySelectorAll(".nav-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.screen === id);
+
+  // Update sidebar buttons (ignore team-page-screen for active state)
+  document.querySelectorAll(".sidebar-btn").forEach(btn => {
+    const target = btn.dataset.screen;
+    btn.classList.toggle("active", target === id || (id === "team-page-screen" && target === "teams-screen"));
   });
+
   if (id === "standings-screen") renderStandings();
   if (id === "awards-screen") renderAwards();
-  if (id === "rosters-screen") {
-    populateRosterSelect();
-    renderRoster(parseInt($("roster-team-select").value) || 0);
-  }
+  if (id === "teams-screen") renderTeamsGrid();
 }
 
 // ============================================
@@ -434,8 +375,7 @@ function applyTime(seconds) {
 
 function switchPossession() {
   game.possession = game.possession === "home" ? "away" : "home";
-  game.down = 1;
-  game.distance = 10;
+  game.down = 1; game.distance = 10;
 }
 
 function flipField() {
@@ -453,7 +393,6 @@ function finishGame() {
 
 function processPlay() {
   if (!game || game.gameOver) return;
-
   const playType = $("play-type").value;
   let yards = parseInt($("yards-input").value) || 0;
   const current = game.possession === "home" ? game.home : game.away;
@@ -481,20 +420,15 @@ function processPlay() {
   }
 
   if (["run", "pass_complete", "pass_incomplete", "sack"].includes(playType)) {
-    if (yards >= game.distance) {
-      game.down = 1; game.distance = 10; description += " — FIRST DOWN!";
-    } else {
-      game.down += 1; game.distance -= yards;
-      if (game.down > 4) {
-        description += " — TURNOVER ON DOWNS";
-        switchPossession(); flipField();
-      }
+    if (yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
+    else {
+      game.down++; game.distance -= yards;
+      if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); }
     }
   }
 
   if (game.yardLine < 0) game.yardLine = 0;
   if (game.yardLine > 100) game.yardLine = 100;
-
   game.playLog.push(description);
   applyTime(timeUsed);
   updateUI();
@@ -506,7 +440,7 @@ function processPlay() {
 window.addEventListener("DOMContentLoaded", () => {
   populateTeamSelects();
 
-  document.querySelectorAll(".nav-btn").forEach(btn => {
+  document.querySelectorAll(".sidebar-btn").forEach(btn => {
     btn.addEventListener("click", () => showScreen(btn.dataset.screen));
   });
 
@@ -551,7 +485,5 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  $("roster-team-select").addEventListener("change", (e) => {
-    renderRoster(parseInt(e.target.value));
-  });
+  $("back-to-teams").addEventListener("click", () => showScreen("teams-screen"));
 });
