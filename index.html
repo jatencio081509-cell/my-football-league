@@ -99,22 +99,32 @@
       </div>
 
       <!-- Standings -->
-      <div id="standings-screen" class="screen hidden">
-        <div class="standings-header">
-          <h2>League Standings</h2>
-          <button id="reset-standings-btn" class="btn danger small">Reset Standings</button>
-        </div>
-        <div class="table-wrapper">
-          <table class="standings-table">
-            <thead>
-              <tr>
-                <th>#</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th>
-              </tr>
-            </thead>
-            <tbody id="standings-body"></tbody>
-          </table>
-        </div>
-      </div>
+<div id="standings-screen" class="screen hidden">
+
+  <div class="standings-header">
+    <h2>League Standings</h2>
+    <button id="reset-standings-btn" class="btn danger small">
+      Reset Standings
+    </button>
+  </div>
+
+  <div id="standings-container" class="standings-container"></div>
+
+</div>
+
+
+<!-- Schedule -->
+<div id="schedule-screen" class="screen hidden">
+
+  <div class="standings-header">
+    <h2>League Schedule</h2>
+  </div>
+
+  <div id="schedule-container" class="schedule-container"></div>
+
+</div>
+
+</div>
 
       <!-- Awards -->
       <div id="awards-screen" class="screen hidden">
