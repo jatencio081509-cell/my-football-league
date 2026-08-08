@@ -13,7 +13,9 @@ body {
 
 .layout {
   display: flex;
+  width: 100%;
   min-height: 100vh;
+  align-items: stretch;
 }
 
 .sidebar {
@@ -86,16 +88,19 @@ body {
 
 .main {
   flex: 1;
+  min-width: 0;
+  min-height: 100vh;
   padding: 28px 32px;
   overflow-y: auto;
-  max-height: 100vh;
 }
 
 .screen {
-  background: #1e293b;
-  border-radius: 12px;
-  padding: 25px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    min-height: 100vh;
+    width: 100%;
+    padding: 32px 40px;
+    background: #1e293b;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 .hidden {
@@ -360,60 +365,144 @@ h2, h3 {
   color: #f87171;
 }
 
-.awards-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+/* ============================================
+   LEAGUE AWARDS
+============================================ */
+
+#awards-screen {
+    background: #1e293b;
 }
+
+#awards-screen .standings-header {
+    padding-bottom: 18px;
+    margin-bottom: 25px;
+    border-bottom: 2px solid #c9a227;
+}
+
+#awards-screen .standings-header h2 {
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+/* Awards list */
+
+.awards-list {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+/* Individual award */
 
 .award-card {
-  background: #0f172a;
-  border-radius: 10px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+    background: #162447;
+    border: 1px solid #c9a227;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 190px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+
+.award-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* Award title */
 
 .award-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: #38bdf8;
+    color: #c9a227;
+    font-size: 14px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
 }
 
+/* Winner */
+
 .award-winner {
-  font-size: 1.05rem;
-  color: #f1f5f9;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    font-size: 22px;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.2;
 }
 
 .award-winner.empty {
-  color: #64748b;
-  font-style: italic;
+    color: #64748b;
+    font-size: 17px;
+    font-style: italic;
+    font-weight: 500;
 }
 
+/* Editing controls */
+
 .award-form {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid rgba(201, 162, 39, 0.25);
 }
 
 .award-form input,
 .award-form select {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #334155;
-  background: #1e293b;
-  color: #e2e8f0;
-  font-size: 0.95rem;
+    width: 100%;
+    min-width: 0;
+    padding: 9px 11px;
+    border-radius: 7px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 0.9rem;
 }
 
-.award-form input {
-  min-width: 160px;
+.award-form input:focus,
+.award-form select:focus {
+    outline: none;
+    border-color: #c9a227;
 }
 
-.award-form select {
-  min-width: 180px;
+/* Save button */
+
+.award-save-btn {
+    white-space: nowrap;
+    background: #c9a227 !important;
+    color: #111827 !important;
+    font-weight: 800;
+}
+
+.award-save-btn:hover {
+    background: #e0bd43 !important;
+}
+
+/* Reset button */
+
+#reset-awards-btn {
+    background: #991b1b;
+}
+
+/* Smaller screens */
+
+@media (max-width: 900px) {
+    .awards-list {
+        grid-template-columns: 1fr;
+    }
+
+    .award-form {
+        grid-template-columns: 1fr;
+    }
 }
 
 .teams-grid {
@@ -510,4 +599,385 @@ h2, h3 {
 
 .roster-table .rating-low {
   color: #94a3b8;
+}
+/* ============================
+   ESPN STYLE STANDINGS
+============================ */
+
+#standings-container {
+    font-family: "Arial Narrow", "Roboto Condensed", Arial, sans-serif;
+}
+
+/* Conference block */
+.conference-box {
+    background: #102447;
+    border-radius: 8px;
+    padding: 18px;
+    border: none;
+}
+
+.conference-box h2 {
+    color: white;
+    font-size: 32px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 4px solid #c9a227;
+    padding-bottom: 8px;
+}
+
+
+/* Division boxes */
+.division-box {
+    background: #f4f4f4;
+    border-radius: 6px;
+    padding: 12px;
+    border-top: 4px solid #102447;
+}
+
+.division-box h3 {
+    color: #102447;
+    font-size: 18px;
+    font-weight: 900;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+}
+
+
+/* Team cards */
+.standings-team-card {
+    background: white;
+    color: #111;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+}
+
+.standings-team-card:hover {
+    background: #eef3fa;
+    transform: none;
+    box-shadow: none;
+}
+
+
+/* Team name */
+.standings-team-card div:first-child {
+    font-weight: 800;
+    font-size: 16px;
+}
+
+
+/* Record */
+.standings-team-card div:nth-child(2) {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+
+#schedule-screen,
+#standings-screen,
+#awards-screen,
+#team-page-screen,
+#setup-screen,
+#game-screen {
+    min-height: 100vh;
+}
+/* ============================
+   FOOTBALL THEME STANDINGS
+============================ */
+
+#standings-container {
+    color: white;
+    font-family: "Trebuchet MS", "Arial Narrow", Arial, sans-serif;
+}
+
+.conference-box {
+    background: #162447;
+    color: white;
+    border: 2px solid #d4af37;
+    border-radius: 14px;
+    box-shadow: 0 0 15px rgba(212,175,55,0.25);
+}
+
+.conference-box h2 {
+    color: white;
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    border-bottom: 3px solid #d4af37;
+}
+
+.division-box {
+    background: #1f3263;
+    border: 1px solid #d4af37;
+    border-radius: 12px;
+    color: white;
+}
+
+.division-box h3 {
+    color: white;
+    font-size: 20px;
+    letter-spacing: 1px;
+}
+
+.standings-team-card {
+    background: #243b6b;
+    color: white;
+    border: 1px solid #d4af37;
+    border-radius: 10px;
+    transition: all .2s ease;
+}
+
+.standings-team-card:hover {
+    background: #304d8a;
+    transform: translateY(-3px);
+    box-shadow: 0 0 12px rgba(212,175,55,0.4);
+}
+
+.standings-team-card div:first-child {
+    font-weight: 800;
+    letter-spacing: .5px;
+}
+
+.standings-team-card div:nth-child(2) {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.standings-team-card div:nth-child(3) {
+    color: #facc15;
+    font-weight: bold;
+}
+.schedule-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+
+.schedule-week{
+
+    background:#071b3a;
+    border:2px solid #c9a227;
+    border-radius:12px;
+    overflow:hidden;
+
+}
+
+
+.schedule-week-header{
+
+    background:#0b2b55;
+    color:white;
+    font-size:22px;
+    font-weight:800;
+    padding:15px;
+    letter-spacing:2px;
+    border-bottom:2px solid #c9a227;
+
+}
+
+
+.schedule-game{
+
+    display:grid;
+    grid-template-columns:1fr 50px 1fr;
+    align-items:center;
+
+    padding:18px 25px;
+
+    color:white;
+
+    border-bottom:1px solid rgba(201,162,39,.35);
+
+    transition:.2s;
+
+}
+
+
+.schedule-game:last-child{
+    border-bottom:none;
+}
+
+
+.schedule-game:hover{
+
+    background:#102f5c;
+    transform:scale(1.01);
+
+}
+
+
+.schedule-team{
+
+    font-size:18px;
+    font-weight:700;
+
+}
+
+
+.away-team{
+    text-align:right;
+}
+
+
+.home-team{
+    text-align:left;
+}
+
+
+.schedule-at{
+
+    text-align:center;
+    color:#c9a227;
+    font-weight:bold;
+    font-size:20px;
+
+}
+/* ============================================
+   FOOTBALL FIELD
+   ============================================ */
+
+.football-field {
+    width: 100%;
+    max-width: 1400px;
+    margin: 30px auto;
+    height: 320px;
+    border-radius: 12px;
+}
+
+.field-endzone {
+    width: 11%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    font-weight: 900;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: white;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.field-main {
+    width: 78%;
+    position: relative;
+    overflow: hidden;
+}
+
+.field-grid {
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-linear-gradient(
+            to right,
+            transparent 0,
+            transparent calc(10% - 1px),
+            rgba(255,255,255,0.85) calc(10% - 1px),
+            rgba(255,255,255,0.85) 10%
+        );
+}
+
+/* Yard lines */
+
+.yard-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(255,255,255,0.9);
+}
+
+.line-10 { left: 10%; }
+.line-20 { left: 20%; }
+.line-30 { left: 30%; }
+.line-40 { left: 40%; }
+.line-50 { left: 50%; }
+.line-60 { left: 60%; }
+.line-70 { left: 70%; }
+.line-80 { left: 80%; }
+.line-90 { left: 90%; }
+
+/* Yard numbers */
+
+.yard-lines {
+    position: absolute;
+    top: 12px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    z-index: 3;
+    pointer-events: none;
+}
+
+/* Ball */
+
+.ball-marker {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #facc15;
+    border: 2px solid #111827;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    transition: left 0.5s ease, top 0.5s ease;
+    box-shadow: 0 0 8px rgba(250, 204, 21, 0.7);
+}
+
+/* First down marker */
+
+.first-down-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: yellow;
+    opacity: 0.9;
+    z-index: 5;
+}
+
+/* Play movement line */
+
+.play-line {
+    position: absolute;
+    top: 50%;
+    height: 4px;
+    background: white;
+    transform: translateY(-50%);
+    opacity: 0.9;
+    z-index: 4;
+}
+
+/* Small field hash marks */
+
+.field-main::before,
+.field-main::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: rgba(255,255,255,0.35);
+}
+
+.field-main::before {
+    top: 30%;
+}
+
+.field-main::after {
+    bottom: 30%;
+}
+.screen-container {
+  width: 100%;
+  min-width: 0;
 }

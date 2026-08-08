@@ -138,6 +138,128 @@ function saveStandings(s) { localStorage.setItem("mfl-standings", JSON.stringify
 
 let standings = loadStandings();
 
+// ============================================
+// SCHEDULE
+// ============================================
+
+let schedule = [];
+
+function saveSchedule() {
+    localStorage.setItem(
+        "mfl-schedule",
+        JSON.stringify(schedule)
+    );
+}
+
+function loadSchedule() {
+    const saved = localStorage.getItem("mfl-schedule");
+
+    if(saved){
+        try {
+            return JSON.parse(saved);
+        } catch(e){
+            return [];
+        }
+    }
+
+    return [];
+}
+
+schedule = loadSchedule();
+
+// ============================================
+// SCHEDULE GENERATOR
+// ============================================
+
+function addGame(week, home, away) {
+    schedule.push({
+        week,
+        home,
+        away,
+        played: false,
+        homeScore: null,
+        awayScore: null
+    });
+}
+
+
+function generateDivisionGames() {
+
+    const divisions = {};
+
+    // Group teams by conference + division
+    TEAMS.forEach(team => {
+
+        const key = `${team.conference}-${team.division}`;
+
+        if(!divisions[key]){
+            divisions[key] = [];
+        }
+
+        divisions[key].push(team);
+
+    });
+
+
+    let week = 1;
+
+
+    Object.values(divisions).forEach(divTeams => {
+
+        if(divTeams.length !== 4) return;
+
+
+        // Every team plays the other 3 twice
+        for(let i = 0; i < divTeams.length; i++){
+
+            for(let j = i + 1; j < divTeams.length; j++){
+
+                addGame(
+                    week,
+                    divTeams[i],
+                    divTeams[j]
+                );
+
+                week++;
+
+                if(week > 18){
+                    week = 1;
+                }
+
+
+                addGame(
+                    week,
+                    divTeams[j],
+                    divTeams[i]
+                );
+
+                week++;
+
+                if(week > 18){
+                    week = 1;
+                }
+
+            }
+
+        }
+
+    });
+
+}
+
+function generateSchedule() {
+
+    // Don't overwrite an existing season schedule
+    if(schedule.length > 0) {
+        return;
+    }
+
+    generateDivisionGames();
+
+    saveSchedule();
+
+}
+
 function recordGameResult(homeTeam, awayTeam, homeScore, awayScore) {
   const homeKey = teamKey(homeTeam);
   const awayKey = teamKey(awayTeam);
@@ -160,18 +282,262 @@ function getSortedStandings() {
   });
 }
 
+function renderWeeklyGames() {
+    const container = $("weekly-games");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    $("current-week-label").textContent = currentWeek;
+
+    const weekGames = schedule.filter(
+        scheduledGame => scheduledGame.week === currentWeek
+    );
+
+    if (weekGames.length === 0) {
+        container.innerHTML = `
+            <div class="empty-note">
+                No games scheduled for Week ${currentWeek}.
+            </div>
+        `;
+        return;
+    }
+
+    weekGames.forEach(scheduledGame => {
+
+        const card = document.createElement("div");
+        card.className = "week-game-card";
+
+        const awayName = teamName(scheduledGame.away);
+        const homeName = teamName(scheduledGame.home);
+
+        if (scheduledGame.played) {
+
+            card.innerHTML = `
+                <div class="game-teams">
+                    <strong>${awayName}</strong>
+                    <span class="game-score">
+                        ${scheduledGame.awayScore}
+                    </span>
+                </div>
+
+                <div class="game-final">
+                    FINAL
+                </div>
+
+                <div class="game-teams">
+                    <strong>${homeName}</strong>
+                    <span class="game-score">
+                        ${scheduledGame.homeScore}
+                    </span>
+                </div>
+            `;
+
+        } else {
+
+            card.innerHTML = `
+                <div class="game-teams">
+                    <strong>${awayName}</strong>
+                </div>
+
+                <div class="game-vs">@</div>
+
+                <div class="game-teams">
+                    <strong>${homeName}</strong>
+                </div>
+
+                <button class="btn primary play-scheduled-game">
+                    Play Game
+                </button>
+            `;
+
+            const playButton =
+                card.querySelector(".play-scheduled-game");
+
+            playButton.addEventListener("click", () => {
+
+                window.currentScheduledGame = scheduledGame;
+
+                game = createNewGame(
+                    scheduledGame.home,
+                    scheduledGame.away,
+                    scheduledGame
+                );
+
+                updateUI();
+                showScreen("game-screen");
+            });
+        }
+
+        container.appendChild(card);
+    });
+}
+
+function renderSchedule(){
+
+const container = $("schedule-container");
+
+container.innerHTML = "";
+
+const weeks = {};
+
+schedule.forEach(game => {
+
+    if(!weeks[game.week]){
+        weeks[game.week] = [];
+    }
+
+    weeks[game.week].push(game);
+
+});
+
+
+Object.keys(weeks)
+.sort((a,b)=>a-b)
+.forEach(week=>{
+
+
+    const weekBox = document.createElement("div");
+
+    weekBox.className = "schedule-week";
+
+
+    weekBox.innerHTML = `
+        <div class="schedule-week-header">
+            WEEK ${week}
+        </div>
+    `;
+
+
+    weeks[week].forEach(game=>{
+
+
+        const gameCard = document.createElement("div");
+
+        gameCard.className = "schedule-game";
+
+
+        gameCard.innerHTML = `
+
+        <div class="schedule-team away-team">
+            <span>${teamName(game.away)}</span>
+        </div>
+
+        <div class="schedule-at">
+            @
+        </div>
+
+        <div class="schedule-team home-team">
+            <span>${teamName(game.home)}</span>
+        </div>
+
+        `;
+
+
+        weekBox.appendChild(gameCard);
+
+    });
+
+
+    container.appendChild(weekBox);
+
+});
+
+}
+
 function renderStandings() {
-  const tbody = $("standings-body");
-  tbody.innerHTML = "";
-  getSortedStandings().forEach((row, index) => {
-    const gp = row.wins + row.losses + row.ties;
-    const pct = gp === 0 ? ".000" : (row.wins / gp).toFixed(3).replace(/^0/, "");
-    const diff = row.pf - row.pa;
-    const diffClass = diff > 0 ? "positive" : diff < 0 ? "negative" : "";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="rank">${index + 1}</td><td class="team-cell">${teamName(row.team)}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td>${pct}</td><td>${row.pf}</td><td>${row.pa}</td><td class="${diffClass}">${diff > 0 ? "+" : ""}${diff}</td>`;
-    tbody.appendChild(tr);
-  });
+    const container = $("standings-container");
+    container.innerHTML = "";
+
+    const conferences = ["AFC", "NFC"];
+    const divisions = ["East", "North", "South", "West"];
+
+    conferences.forEach(conf => {
+
+        const conferenceBox = document.createElement("div");
+        conferenceBox.className = "conference-box";
+
+        conferenceBox.innerHTML = `
+            <h2>${conf}</h2>
+            <div class="division-grid"></div>
+        `;
+
+        const divisionGrid =
+            conferenceBox.querySelector(".division-grid");
+
+
+        divisions.forEach(div => {
+
+            const teams = getSortedStandings().filter(row =>
+                row.team.conference === conf &&
+                row.team.division === div
+            );
+
+
+            const divisionBox =
+                document.createElement("div");
+
+            divisionBox.className = "division-box";
+
+            divisionBox.innerHTML = `
+                <h3>${div}</h3>
+                <div class="division-teams"></div>
+            `;
+
+
+            const teamContainer =
+                divisionBox.querySelector(".division-teams");
+
+
+            teams.forEach(row => {
+
+                const teamCard =
+                    document.createElement("div");
+
+                teamCard.className =
+                    "standings-team-card";
+
+
+                teamCard.innerHTML = `
+                    <div>
+                        ${teamName(row.team)}
+                    </div>
+
+                    <div>
+                        ${row.wins}-${row.losses}-${row.ties}
+                    </div>
+
+                    <div>
+                        OVR ${getTeamOverall(row.team)}
+                    </div>
+                `;
+
+
+                teamCard.addEventListener("click", () => {
+
+                    const index = TEAMS.findIndex(
+                        t => teamKey(t) === teamKey(row.team)
+                    );
+
+                    openTeamPage(index);
+
+                });
+
+
+                teamContainer.appendChild(teamCard);
+
+            });
+
+
+            divisionGrid.appendChild(divisionBox);
+
+        });
+
+
+        container.appendChild(conferenceBox);
+
+    });
 }
 
 // ============================================
@@ -290,14 +656,33 @@ function openTeamPage(teamIndex) {
 // ============================================
 let game = null;
 
-function createNewGame(home, away) {
-  return {
-    home, away, homeScore: 0, awayScore: 0,
-    quarter: 1, clockSeconds: 15 * 60,
-    possession: "home", down: 1, distance: 10, yardLine: 25,
-    playLog: [`Game started: ${teamName(away)} at ${teamName(home)}`, "Kickoff — ball at the 25"],
-    gameOver: false, resultRecorded: false
-  };
+function createNewGame(home, away, scheduledGame = null) {
+    return {
+        home,
+        away,
+
+        // Link this game to the exact scheduled game
+        scheduledGame,
+
+        homeScore: 0,
+        awayScore: 0,
+
+        quarter: 1,
+        clockSeconds: 15 * 60,
+
+        possession: "home",
+        down: 1,
+        distance: 10,
+        yardLine: 25,
+
+        playLog: [
+            `Game started: ${teamName(away)} at ${teamName(home)}`,
+            "Kickoff — ball at the 25"
+        ],
+
+        gameOver: false,
+        resultRecorded: false
+    };
 }
 
 // ============================================
@@ -306,14 +691,7 @@ function createNewGame(home, away) {
 function $(id) { return document.getElementById(id); }
 
 function populateTeamSelects() {
-  const awaySelect = $("away-select");
-  const homeSelect = $("home-select");
-  awaySelect.innerHTML = ""; homeSelect.innerHTML = "";
-  TEAMS.forEach((team, i) => {
-    const o1 = document.createElement("option"); o1.value = i; o1.textContent = teamName(team); awaySelect.appendChild(o1);
-    const o2 = document.createElement("option"); o2.value = i; o2.textContent = teamName(team); homeSelect.appendChild(o2);
-  });
-  awaySelect.value = 0; homeSelect.value = 1;
+    // Games are now selected from the current week's schedule.
 }
 
 function clockDisplay(seconds) {
@@ -332,24 +710,53 @@ function downDisplay(down, distance) {
 }
 
 function updateUI() {
-  if (!game) return;
-  $("away-name").textContent = teamName(game.away);
-  $("home-name").textContent = teamName(game.home);
-  $("away-score").textContent = game.awayScore;
-  $("home-score").textContent = game.homeScore;
-  $("quarter").textContent = `Q${game.quarter}`;
-  $("clock").textContent = clockDisplay(game.clockSeconds);
-  $("down-distance").textContent = downDisplay(game.down, game.distance);
-  $("field-pos").textContent = `Ball on ${fieldPosDisplay(game.yardLine)}`;
-  const possTeam = game.possession === "home" ? game.home : game.away;
-  $("possession-text").textContent = `Possession: ${teamName(possTeam)}`;
-  const log = $("log-content");
-  log.innerHTML = "";
-  game.playLog.slice().reverse().forEach(entry => {
-    const div = document.createElement("div");
-    div.textContent = entry;
-    log.appendChild(div);
-  });
+if (!game) return;
+
+const currentGame = game;
+
+    // Teams
+    $("away-name").textContent = teamName(currentGame.away);
+    $("home-name").textContent = teamName(currentGame.home);
+
+    // Scores
+    $("away-score").textContent = currentGame.awayScore;
+    $("home-score").textContent = currentGame.homeScore;
+
+    // Game information
+    $("quarter").textContent = `Q${currentGame.quarter}`;
+    $("clock").textContent = clockDisplay(currentGame.clockSeconds);
+
+    $("down-distance").textContent =
+        downDisplay(currentGame.down, currentGame.distance);
+
+    $("field-pos").textContent =
+        `Ball on ${fieldPosDisplay(currentGame.yardLine)}`;
+
+    // Possession
+    const possessionTeam =
+        currentGame.possession === "home"
+            ? currentGame.home
+            : currentGame.away;
+
+    $("possession-text").textContent =
+        `Possession: ${teamName(possessionTeam)}`;
+
+    // Play-by-play
+    const log = $("log-content");
+
+    log.innerHTML = "";
+
+    currentGame.playLog
+        .slice()
+        .reverse()
+        .forEach(entry => {
+
+            const div = document.createElement("div");
+
+            div.textContent = entry;
+
+            log.appendChild(div);
+        });
 }
 
 function showScreen(id) {
@@ -365,6 +772,7 @@ function showScreen(id) {
   if (id === "standings-screen") renderStandings();
   if (id === "awards-screen") renderAwards();
   if (id === "teams-screen") renderTeamsGrid();
+  if (id === "schedule-screen") renderSchedule();
 }
 
 // ============================================
@@ -398,75 +806,314 @@ function flipField() {
 }
 
 function finishGame() {
-  if (!game || game.resultRecorded) return;
-  game.resultRecorded = true;
-  recordGameResult(game.home, game.away, game.homeScore, game.awayScore);
-  alert(`Final Score\n${teamName(game.away)} ${game.awayScore}  -  ${game.homeScore} ${teamName(game.home)}\n\nStandings have been updated!`);
+    if (!game || game.resultRecorded) return;
+
+    game.resultRecorded = true;
+
+    // Update standings
+    recordGameResult(
+        game.home,
+        game.away,
+        game.homeScore,
+        game.awayScore
+    );
+
+    // Mark the scheduled game as completed
+    if (window.currentScheduledGame) {
+
+        window.currentScheduledGame.played = true;
+        window.currentScheduledGame.homeScore = game.homeScore;
+        window.currentScheduledGame.awayScore = game.awayScore;
+
+        saveSchedule();
+
+        window.currentScheduledGame = null;
+    }
+
+    alert(
+        `Final Score\n` +
+        `${teamName(game.away)} ${game.awayScore} - ` +
+        `${game.homeScore} ${teamName(game.home)}\n\n` +
+        `Standings have been updated!`
+    );
 }
 
 function processPlay() {
-  if (!game || game.gameOver) return;
-  const playType = $("play-type").value;
-  let yards = parseInt($("yards-input").value) || 0;
-  const current = game.possession === "home" ? game.home : game.away;
-  const other = game.possession === "home" ? game.away : game.home;
-  const team = teamName(current);
-  let description = "";
-  let timeUsed = 30;
+    if (!game || game.gameOver) return;
 
-  switch (playType) {
-    case "run": description = `${team} run for ${yards} yards`; game.yardLine += yards; timeUsed = 35; break;
-    case "pass_complete": description = `${team} pass complete for ${yards} yards`; game.yardLine += yards; timeUsed = 28; break;
-    case "pass_incomplete": description = `${team} pass incomplete`; timeUsed = 12; yards = 0; break;
-    case "sack": description = `${team} sacked for a loss of ${Math.abs(yards)} yards`; game.yardLine += yards; timeUsed = 25; break;
-    case "interception": description = `INTERCEPTION by ${teamName(other)}!`; switchPossession(); flipField(); timeUsed = 20; break;
-    case "fumble": description = `FUMBLE recovered by ${teamName(other)}!`; switchPossession(); flipField(); timeUsed = 25; break;
-    case "punt": description = `${team} punts`; switchPossession(); game.yardLine = 100 - (game.yardLine + 40); if (game.yardLine < 1) game.yardLine = 20; timeUsed = 15; break;
-    case "fg_made": description = `FIELD GOAL is GOOD! (+3 ${team})`; if (game.possession === "home") game.homeScore += 3; else game.awayScore += 3; switchPossession(); game.yardLine = 25; timeUsed = 10; break;
-    case "fg_missed": description = `Field goal is NO GOOD`; switchPossession(); flipField(); timeUsed = 10; break;
-    case "touchdown": description = `TOUCHDOWN ${team}!!!`; if (game.possession === "home") game.homeScore += 6; else game.awayScore += 6; timeUsed = 15; break;
-    case "xp_good": description = `Extra point is GOOD`; if (game.possession === "home") game.homeScore += 1; else game.awayScore += 1; switchPossession(); game.yardLine = 25; timeUsed = 5; break;
-    case "xp_missed": description = `Extra point is MISSED`; switchPossession(); game.yardLine = 25; timeUsed = 5; break;
-    case "two_pt_good": description = `2-POINT CONVERSION SUCCESSFUL!`; if (game.possession === "home") game.homeScore += 2; else game.awayScore += 2; switchPossession(); game.yardLine = 25; timeUsed = 8; break;
-    case "two_pt_failed": description = `2-point conversion FAILED`; switchPossession(); game.yardLine = 25; timeUsed = 8; break;
-    case "safety": description = `SAFETY! (+2 ${teamName(other)})`; if (game.possession === "home") game.awayScore += 2; else game.homeScore += 2; switchPossession(); game.yardLine = 25; timeUsed = 10; break;
-  }
+    // Read the seven physical dice
+    const roll = {
+        d4: parseInt($("die-1").value),
+        d10_0_9: parseInt($("die-2").value),
+        d8: parseInt($("die-3").value),
+        d100_tens: parseInt($("die-4").value),
+        d20: parseInt($("die-5").value),
+        d10: parseInt($("die-6").value),
+        d6: parseInt($("die-7").value)
+    };
 
-  if (["run", "pass_complete", "pass_incomplete", "sack"].includes(playType)) {
-    if (yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
-    else {
-      game.down++; game.distance -= yards;
-      if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); }
+    // Make sure every die has been entered
+    if (
+        Number.isNaN(roll.d4) ||
+        Number.isNaN(roll.d10_0_9) ||
+        Number.isNaN(roll.d8) ||
+        Number.isNaN(roll.d100_tens) ||
+        Number.isNaN(roll.d20) ||
+        Number.isNaN(roll.d10) ||
+        Number.isNaN(roll.d6)
+    ) {
+        alert("Enter the result of all seven dice.");
+        return;
     }
-  }
 
-  if (game.yardLine < 0) game.yardLine = 0;
-  if (game.yardLine > 100) game.yardLine = 100;
-  game.playLog.push(description);
-  applyTime(timeUsed);
-  updateUI();
+    // Validate dice
+    if (
+        roll.d4 < 1 || roll.d4 > 4 ||
+        roll.d10_0_9 < 0 || roll.d10_0_9 > 9 ||
+        roll.d8 < 1 || roll.d8 > 8 ||
+        roll.d100_tens < 0 || roll.d100_tens > 90 ||
+        roll.d100_tens % 10 !== 0 ||
+        roll.d20 < 1 || roll.d20 > 20 ||
+        roll.d10 < 1 || roll.d10 > 10 ||
+        roll.d6 < 1 || roll.d6 > 6
+    ) {
+        alert("One or more dice results are invalid.");
+        return;
+    }
+
+    const current =
+        game.possession === "home"
+            ? game.home
+            : game.away;
+
+    const other =
+        game.possession === "home"
+            ? game.away
+            : game.home;
+
+    const team = teamName(current);
+
+    // Ask the dice engine what happened
+    const outcome = DiceEngine.determinePlayOutcome(roll);
+
+    let description = "";
+    let timeUsed = 30;
+
+    // ============================================
+    // APPLY DICE OUTCOME
+    // ============================================
+
+    switch (outcome.type) {
+
+        case "run":
+            description =
+                `${team} — ${outcome.name} for ${outcome.yards} yards`;
+
+            game.yardLine += outcome.yards;
+            timeUsed = 35;
+
+            if (outcome.yards >= game.distance) {
+                game.down = 1;
+                game.distance = 10;
+                description += " — FIRST DOWN!";
+            } else {
+                game.down++;
+                game.distance -= outcome.yards;
+
+                if (game.down > 4) {
+                    description += " — TURNOVER ON DOWNS";
+                    switchPossession();
+                    flipField();
+                }
+            }
+
+            break;
+
+
+        case "pass_complete":
+            description =
+                `${team} — ${outcome.name} for ${outcome.yards} yards`;
+
+            game.yardLine += outcome.yards;
+            timeUsed = 28;
+
+            if (outcome.yards >= game.distance) {
+                game.down = 1;
+                game.distance = 10;
+                description += " — FIRST DOWN!";
+            } else {
+                game.down++;
+                game.distance -= outcome.yards;
+
+                if (game.down > 4) {
+                    description += " — TURNOVER ON DOWNS";
+                    switchPossession();
+                    flipField();
+                }
+            }
+
+            break;
+
+
+        case "pass_incomplete":
+            description =
+                `${team} — INCOMPLETE PASS`;
+
+            game.down++;
+            timeUsed = 12;
+
+            if (game.down > 4) {
+                description += " — TURNOVER ON DOWNS";
+                switchPossession();
+                flipField();
+            }
+
+            break;
+
+
+        case "sack":
+            description =
+                `${team} — SACK, LOSS OF ${Math.abs(outcome.yards)} YARDS`;
+
+            game.yardLine += outcome.yards;
+            game.distance += Math.abs(outcome.yards);
+            game.down++;
+
+            timeUsed = 25;
+
+            if (game.down > 4) {
+                description += " — TURNOVER ON DOWNS";
+                switchPossession();
+                flipField();
+            }
+
+            break;
+
+
+        case "interception":
+            description =
+                `INTERCEPTION! ${team} throws an interception.`;
+
+            switchPossession();
+            flipField();
+
+            timeUsed = 20;
+
+            break;
+
+
+        case "fumble":
+            description =
+                `FUMBLE! ${team} fumbles the ball. ${teamName(other)} recovers!`;
+
+            switchPossession();
+            flipField();
+
+            timeUsed = 25;
+
+            break;
+
+
+        case "big_play":
+            description =
+                `${team} — BIG PLAY for ${outcome.yards} yards!`;
+
+            game.yardLine += outcome.yards;
+
+            if (outcome.yards >= game.distance) {
+                game.down = 1;
+                game.distance = 10;
+                description += " — FIRST DOWN!";
+            } else {
+                game.down++;
+                game.distance -= outcome.yards;
+            }
+
+            timeUsed = 30;
+
+            break;
+
+
+        case "penalty":
+            description =
+                `${team} — PENALTY, ${outcome.yards} YARD PENALTY`;
+
+            game.yardLine -= outcome.yards;
+
+            timeUsed = 10;
+
+            break;
+
+
+        case "punt":
+            description =
+                `${team} punts ${outcome.yards} yards.`;
+
+            switchPossession();
+
+            game.yardLine =
+                100 - (game.yardLine + outcome.yards);
+
+            if (game.yardLine < 1) {
+                game.yardLine = 20;
+            }
+
+            timeUsed = 15;
+
+            break;
+    }
+
+    // Keep field position within bounds
+    if (game.yardLine < 0) {
+        game.yardLine = 0;
+    }
+
+    if (game.yardLine > 100) {
+        game.yardLine = 100;
+    }
+
+    // Add dice + result to play log
+    game.playLog.push(description);
+
+    // Clear dice inputs
+    $("die-1").value = "";
+    $("die-2").value = "";
+    $("die-3").value = "";
+    $("die-4").value = "";
+    $("die-5").value = "";
+    $("die-6").value = "";
+    $("die-7").value = "";
+
+    // Advance game clock
+    applyTime(timeUsed);
+
+    updateUI();
 }
 
 // ============================================
 // EVENT LISTENERS
 // ============================================
 window.addEventListener("DOMContentLoaded", () => {
+  
+  generateSchedule();
+
+  currentWeek = parseInt(localStorage.getItem("mfl-current-week")) || 1;
+
+renderWeeklyGames();
+
   populateTeamSelects();
 
   document.querySelectorAll(".sidebar-btn").forEach(btn => {
     btn.addEventListener("click", () => showScreen(btn.dataset.screen));
   });
 
-  $("start-btn").addEventListener("click", () => {
-    const awayIdx = parseInt($("away-select").value);
-    const homeIdx = parseInt($("home-select").value);
-    if (awayIdx === homeIdx) { alert("Home and Away teams must be different!"); return; }
-    game = createNewGame(TEAMS[homeIdx], TEAMS[awayIdx]);
-    updateUI();
-    showScreen("game-screen");
-  });
+  
 
-  $("submit-play").addEventListener("click", processPlay);
+    const submitPlayButton = $("roll-play-btn");
+
+if (submitPlayButton) {
+    submitPlayButton.addEventListener("click", processPlay);
+}
 
   $("end-game-btn").addEventListener("click", () => {
     if (game && !game.gameOver) {
@@ -498,5 +1145,4 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  $("back-to-teams").addEventListener("click", () => showScreen("teams-screen"));
-});
+$("back-to-standings").addEventListener("click", () => showScreen("standings-screen"));});
