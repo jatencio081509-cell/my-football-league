@@ -979,6 +979,7 @@ h2, h3 {
     bottom: 30%;
 }
 .screen-container {
-  width: 100%;
-  min-width: 0;
+    width: 100%;
+    min-width: 0;
+    flex: 1;
 }

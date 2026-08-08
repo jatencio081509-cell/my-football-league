@@ -14,32 +14,26 @@
         <h1>MFL</h1>
         <p>My Football League</p>
       </div>
-
       <nav class="sidebar-nav">
         <button class="sidebar-btn active" data-screen="setup-screen">Play Game</button>
         <button class="sidebar-btn" data-screen="schedule-screen">Schedule</button>
         <button class="sidebar-btn" data-screen="standings-screen">Standings</button>
         <button class="sidebar-btn" data-screen="awards-screen">Awards</button>
       </nav>
-
       <div class="sidebar-footer">
         <p>Dice League</p>
       </div>
     </aside>
-
+<main class="main"> 
    <!-- Play Game -->
 <div id="setup-screen" class="screen">
-
     <div class="week-header">
         <h2>Week <span id="current-week-label">1</span></h2>
     </div>
-
     <div id="weekly-games" class="weekly-games">
         <!-- Games are inserted here by JavaScript -->
     </div>
-
 </div>
-
       <!-- Live Game -->
       <div id="game-screen" class="screen hidden">
         <div class="scoreboard">
@@ -63,61 +57,46 @@
         <div class="possession" id="possession-text">Possession: Home Team</div>
         <div class="play-entry">
   <h3>Roll for Play</h3>
-
   <p class="dice-instructions">
     Roll all seven dice and enter the numbers in order.
   </p>
-
   <div class="dice-inputs">
-
     <div class="dice-input">
       <label>1–4</label>
       <input type="number" id="die-1" min="1" max="4" placeholder="—">
     </div>
-
     <div class="dice-input">
       <label>0–9</label>
       <input type="number" id="die-2" min="0" max="9" placeholder="—">
     </div>
-
     <div class="dice-input">
       <label>1–8</label>
       <input type="number" id="die-3" min="1" max="8" placeholder="—">
     </div>
-
     <div class="dice-input">
       <label>00–90</label>
       <input type="number" id="die-4" min="0" max="90" step="10" placeholder="—">
     </div>
-
     <div class="dice-input">
       <label>1–20</label>
       <input type="number" id="die-5" min="1" max="20" placeholder="—">
     </div>
-
     <div class="dice-input">
       <label>1–10</label>
       <input type="number" id="die-6" min="1" max="10" placeholder="—">
     </div>
-
     <div class="dice-input">
       <label>1–6</label>
       <input type="number" id="die-7" min="1" max="6" placeholder="—">
     </div>
-
     <button id="roll-play-btn" class="btn primary">
   Determine Play
 </button>
-
 <div id="dice-result" class="dice-result hidden"></div>
-
   </div>
-
   <button id="submit-dice-roll" class="btn primary">
     Resolve Play
   </button>
-
-  <div id="dice-result" class="dice-result hidden"></div>
 </div>
         <div class="play-log">
           <h3>Play-by-Play</h3>
@@ -128,71 +107,56 @@
           <button id="new-game-btn" class="btn">New Game</button>
         </div>
       </div>
-
       <!-- Standings -->
 <div id="standings-screen" class="screen hidden">
-
   <div class="standings-header">
-    <h2>League Standings</h2>
+    <div>
+      <h2>League Standings</h2>
+      <select id="standings-view-select" class="standings-view-select">
+        <option value="league">League</option>
+        <option value="conference">Conference</option>
+        <option value="division">Division</option>
+      </select>
+    </div>
     <button id="reset-standings-btn" class="btn danger small">
       Reset Standings
     </button>
   </div>
-
   <div id="standings-container" class="standings-container"></div>
-
 </div>
-
-
 <!-- Schedule -->
 <div id="schedule-screen" class="screen hidden">
-
   <div class="standings-header">
     <h2>League Schedule</h2>
   </div>
-
   <div id="schedule-container" class="schedule-container"></div>
-
 </div>
-
-</div>
-
       <!-- Awards -->
 <div id="awards-screen" class="screen hidden">
   <div class="standings-header">
     <h2>League Awards</h2>
     <button id="reset-awards-btn" class="btn danger small">Reset Awards</button>
   </div>
-
   <div id="awards-list" class="awards-list"></div>
 </div>
-      <!-- Teams List -->
-        <h2>All Teams</h2>
-        <div id="teams-grid" class="teams-grid"></div>
-      </div>
-
       <!-- Individual Team Page -->
       <div id="team-page-screen" class="screen hidden">
         <button id="back-to-standings" class="btn small back-btn">← Back to Standings</button>
-
         <div class="team-page-header">
           <h2 id="team-page-name">Team Name</h2>
           <div id="team-page-rating">Overall: --</div>
           <div class="team-record" id="team-page-record">0-0-0</div>
         </div>
-
         <div class="team-page-section">
           <h3>Standing</h3>
           <div id="team-page-standing" class="team-standing-box">—</div>
         </div>
-
         <div class="team-page-section">
           <h3>Upcoming Games</h3>
           <div id="team-page-upcoming" class="upcoming-box">
             <p class="empty-note">Season schedule coming soon.</p>
           </div>
         </div>
-
         <div class="team-page-section">
           <h3>Roster</h3>
           <div class="table-wrapper">
@@ -215,9 +179,7 @@
       </div>
     </main>
   </div>
-
   <script src="diceEngine.js"></script>
   <script src="renderer.js"></script>
-
 </body>
 </html>
