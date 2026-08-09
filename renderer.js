@@ -35,12 +35,8 @@ const TEAMS = [
   { city: "Seattle", name: "Tree Bearers", state: "WA", conference: "AFC", division: "North" },
   { city: "Charleston", name: "Cardinals", state: "WV", conference: "AFC", division: "East" },
 ];
-function teamName(team) {
-  return `${team.city} ${team.name}`;
-}
-function teamKey(team) {
-  return `${team.city}-${team.name}`;
-}
+function teamName(team) { return `${team.city} ${team.name}`; }
+function teamKey(team) { return `${team.city}-${team.name}`; }
 function mulberry32(a) {
   return function() {
     let t = a += 0x6D2B79F5;
@@ -65,9 +61,7 @@ const POSITIONS = [
   { pos: "P", count: 1, hMin: 71, hMax: 76, wMin: 190, wMax: 230 },
 ];
 function inchesToHeight(inches) {
-  const feet = Math.floor(inches / 12);
-  const inch = inches % 12;
-  return `${feet}'${inch}`;
+  return `${Math.floor(inches / 12)}'${inches % 12}`;
 }
 function generateRosters() {
   const allRosters = {};
@@ -93,10 +87,10 @@ function generateRosters() {
   return allRosters;
 }
 const ROSTERS = generateRosters();
-function getTeamOverall(team){
-    const players = ROSTERS[teamKey(team)] || [];
-    if(players.length === 0) return 0;
-    return Math.round(players.reduce((sum, p) => sum + p.rating, 0) / players.length);
+function getTeamOverall(team) {
+  const players = ROSTERS[teamKey(team)] || [];
+  if (!players.length) return 0;
+  return Math.round(players.reduce((s, p) => s + p.rating, 0) / players.length);
 }
 function createEmptyStandings() {
   const s = {};
@@ -110,35 +104,68 @@ function loadStandings() {
 }
 function saveStandings(s) { localStorage.setItem("mfl-standings", JSON.stringify(s)); }
 let standings = loadStandings();
-let schedule = [];
-let currentWeek = 1;
-function saveSchedule() { localStorage.setItem("mfl-schedule", JSON.stringify(schedule)); }
-function loadSchedule() {
-  const saved = localStorage.getItem("mfl-schedule");
-  if (saved) { try { return JSON.parse(saved); } catch (e) { return []; } }
-  return [];
-}
-schedule = loadSchedule();
 
-// NFL schedule via scheduleGenerator.js (loaded after this file)
+// ---- Schedule + byes ----
+let schedule = [];
+let byeWeeks = {};
+let teamsOnByeByWeek = {};
+let currentWeek = 1;
+
+function saveSchedule() {
+  localStorage.setItem("mfl-schedule", JSON.stringify({
+    games: schedule,
+    byeWeeks,
+    teamsOnByeByWeek
+  }));
+}
+function loadScheduleData() {
+  const saved = localStorage.getItem("mfl-schedule");
+  if (!saved) return { games: [], byeWeeks: {}, teamsOnByeByWeek: {} };
+  try {
+    const data = JSON.parse(saved);
+    if (Array.isArray(data)) return { games: data, byeWeeks: {}, teamsOnByeByWeek: {} };
+    return {
+      games: data.games || [],
+      byeWeeks: data.byeWeeks || {},
+      teamsOnByeByWeek: data.teamsOnByeByWeek || {}
+    };
+  } catch (e) {
+    return { games: [], byeWeeks: {}, teamsOnByeByWeek: {} };
+  }
+}
+(function initSchedule() {
+  const data = loadScheduleData();
+  schedule = data.games;
+  byeWeeks = data.byeWeeks;
+  teamsOnByeByWeek = data.teamsOnByeByWeek;
+})();
+
 function generateSchedule(force = false) {
   if (schedule.length > 0 && !force) return;
   if (window.ScheduleGenerator && window.ScheduleGenerator.buildFullNFLSchedule) {
-    schedule = window.ScheduleGenerator.buildFullNFLSchedule();
+    const result = window.ScheduleGenerator.buildFullNFLSchedule();
+    schedule = result.games || [];
+    byeWeeks = result.byeWeeks || {};
+    teamsOnByeByWeek = result.teamsOnByeByWeek || {};
   } else {
     schedule = [];
+    byeWeeks = {};
+    teamsOnByeByWeek = {};
   }
   saveSchedule();
 }
 function resetSchedule() {
   if (!confirm("Reset the entire schedule? This clears all scheduled games and results.")) return;
   schedule = [];
+  byeWeeks = {};
+  teamsOnByeByWeek = {};
   currentWeek = 1;
   localStorage.setItem("mfl-current-week", "1");
   generateSchedule(true);
   renderSchedule();
   renderWeeklyGames();
 }
+
 function recordGameResult(homeTeam, awayTeam, homeScore, awayScore) {
   const homeKey = teamKey(homeTeam);
   const awayKey = teamKey(awayTeam);
@@ -170,16 +197,26 @@ function getSortedStandings() {
     return teamName(a.team).localeCompare(teamName(b.team));
   });
 }
+
+function teamNameFromKey(key) {
+  const t = TEAMS.find(tm => teamKey(tm) === key);
+  return t ? teamName(t) : key;
+}
+
 function renderWeeklyGames() {
   const container = $("weekly-games");
   if (!container) return;
   container.innerHTML = "";
   $("current-week-label").textContent = currentWeek;
+
   const weekGames = schedule.filter(g => g.week === currentWeek);
-  if (weekGames.length === 0) {
-    container.innerHTML = `<div class="empty-note">No games scheduled for Week ${currentWeek}. (Teams on bye this week)</div>`;
+  const byeKeys = teamsOnByeByWeek[String(currentWeek)] || teamsOnByeByWeek[currentWeek] || [];
+
+  if (weekGames.length === 0 && byeKeys.length === 0) {
+    container.innerHTML = `<div class="empty-note">No games scheduled for Week ${currentWeek}.</div>`;
     return;
   }
+
   weekGames.forEach(scheduledGame => {
     const card = document.createElement("div");
     card.className = "week-game-card";
@@ -198,7 +235,17 @@ function renderWeeklyGames() {
     }
     container.appendChild(card);
   });
+
+  if (byeKeys.length > 0) {
+    const byeBox = document.createElement("div");
+    byeBox.className = "week-game-card";
+    byeBox.style.borderColor = "#475569";
+    byeBox.innerHTML = `<div style="color:#94a3b8;font-weight:600;margin-bottom:6px">BYE WEEK</div>
+      <div style="color:#e2e8f0">${byeKeys.map(teamNameFromKey).join(" · ")}</div>`;
+    container.appendChild(byeBox);
+  }
 }
+
 function renderSchedule() {
   const container = $("schedule-container");
   if (!container) return;
@@ -208,27 +255,37 @@ function renderSchedule() {
     if (!weeks[g.week]) weeks[g.week] = [];
     weeks[g.week].push(g);
   });
-  Object.keys(weeks).sort((a, b) => a - b).forEach(week => {
+  for (let week = 1; week <= 18; week++) {
     const weekBox = document.createElement("div");
     weekBox.className = "schedule-week";
-    weekBox.innerHTML = `<div class="schedule-week-header">WEEK ${week} <span style="color:#64748b;font-weight:400;font-size:0.85rem">(${weeks[week].length} games)</span></div>`;
-    weeks[week].forEach(g => {
+    const games = weeks[week] || [];
+    const byeKeys = teamsOnByeByWeek[String(week)] || teamsOnByeByWeek[week] || [];
+    weekBox.innerHTML = `<div class="schedule-week-header">WEEK ${week} <span style="color:#64748b;font-weight:400;font-size:0.85rem">(${games.length} games${byeKeys.length ? `, ${byeKeys.length} on bye` : ""})</span></div>`;
+    games.forEach(g => {
       const gameCard = document.createElement("div");
       gameCard.className = "schedule-game";
       const result = g.played ? ` ${g.awayScore}-${g.homeScore}` : "";
       gameCard.innerHTML = `<div class="schedule-team away-team"><span>${teamName(g.away)}</span></div><div class="schedule-at">@</div><div class="schedule-team home-team"><span>${teamName(g.home)}</span></div>${result ? `<div class="game-final" style="margin-left:8px">${result}</div>` : ""}`;
       weekBox.appendChild(gameCard);
     });
+    if (byeKeys.length) {
+      const byeLine = document.createElement("div");
+      byeLine.className = "schedule-game";
+      byeLine.style.opacity = "0.85";
+      byeLine.innerHTML = `<div style="color:#94a3b8"><strong>BYE:</strong> ${byeKeys.map(teamNameFromKey).join(", ")}</div>`;
+      weekBox.appendChild(byeLine);
+    }
     container.appendChild(weekBox);
-  });
+  }
 }
+
 function renderStandings() {
   const container = $("standings-container");
   if (!container) return;
   container.innerHTML = "";
   const view = $("standings-view-select") ? $("standings-view-select").value : "league";
   const sorted = getSortedStandings();
-  function makeRow(row, index, cols) {
+  function makeRow(row, cols) {
     const tr = document.createElement("tr");
     tr.className = "standings-team-row";
     tr.innerHTML = cols;
@@ -240,7 +297,7 @@ function renderStandings() {
     box.className = "standings-section";
     box.innerHTML = `<div class="standings-section-header"><h3>League</h3></div><div class="standings-table-wrapper"><table class="standings-table"><thead><tr><th>Rank</th><th>Team</th><th>Conference</th><th>Division</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead><tbody></tbody></table></div>`;
     const tbody = box.querySelector("tbody");
-    sorted.forEach((row, i) => tbody.appendChild(makeRow(row, i, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.conference}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
+    sorted.forEach((row, i) => tbody.appendChild(makeRow(row, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.conference}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
     container.appendChild(box);
     return;
   }
@@ -250,7 +307,7 @@ function renderStandings() {
       box.className = "conference-box";
       box.innerHTML = `<div class="standings-section-header"><h3>${conf}</h3></div><div class="standings-table-wrapper"><table class="standings-table"><thead><tr><th>Rank</th><th>Team</th><th>Division</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead><tbody></tbody></table></div>`;
       const tbody = box.querySelector("tbody");
-      sorted.filter(r => r.team.conference === conf).forEach((row, i) => tbody.appendChild(makeRow(row, i, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
+      sorted.filter(r => r.team.conference === conf).forEach((row, i) => tbody.appendChild(makeRow(row, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
       container.appendChild(box);
     });
     return;
@@ -266,12 +323,13 @@ function renderStandings() {
         box.className = "division-box";
         box.innerHTML = `<div class="standings-section-header"><h3>${conf} ${div}</h3></div><div class="standings-table-wrapper"><table class="standings-table"><thead><tr><th>Rank</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead><tbody></tbody></table></div>`;
         const tbody = box.querySelector("tbody");
-        sorted.filter(r => r.team.conference === conf && r.team.division === div).forEach((row, i) => tbody.appendChild(makeRow(row, i, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
+        sorted.filter(r => r.team.conference === conf && r.team.division === div).forEach((row, i) => tbody.appendChild(makeRow(row, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
         container.appendChild(box);
       });
     });
   }
 }
+
 const AWARD_DEFINITIONS = [
   { id: "mvp", title: "League MVP" }, { id: "offensive_poy", title: "Offensive Player of the Year" },
   { id: "defensive_poy", title: "Defensive Player of the Year" }, { id: "rookie", title: "Rookie of the Year" },
@@ -322,6 +380,7 @@ function renderAwards() {
     });
   });
 }
+
 function openTeamPage(teamIndex) {
   const team = TEAMS[teamIndex];
   const key = teamKey(team);
@@ -336,25 +395,35 @@ function openTeamPage(teamIndex) {
   const pct = gp === 0 ? ".000" : (rec.wins / gp).toFixed(3).replace(/^0/, "");
   const diff = rec.pf - rec.pa;
   $("team-page-standing").textContent = `#${rank}  |  ${rec.wins}-${rec.losses}-${rec.ties}  |  PCT ${pct}  |  PF ${rec.pf}  PA ${rec.pa}  |  DIFF ${diff > 0 ? "+" : ""}${diff}`;
-  // Upcoming / remaining games from schedule
+
   const upcoming = $("team-page-upcoming");
   if (upcoming) {
     const teamGames = schedule
       .filter(g => teamKey(g.home) === key || teamKey(g.away) === key)
       .sort((a, b) => a.week - b.week);
-    if (teamGames.length === 0) {
+    const byeWeek = byeWeeks[key];
+    if (teamGames.length === 0 && !byeWeek) {
       upcoming.innerHTML = `<p class="empty-note">No schedule yet. Reset Schedule to generate.</p>`;
     } else {
-      upcoming.innerHTML = teamGames.map(g => {
+      const lines = [];
+      for (let w = 1; w <= 18; w++) {
+        if (byeWeek === w) {
+          lines.push(`<div class="schedule-game" style="margin-bottom:6px;color:#94a3b8"><strong>Wk ${w}</strong> — BYE</div>`);
+          continue;
+        }
+        const g = teamGames.find(x => x.week === w);
+        if (!g) continue;
         const isHome = teamKey(g.home) === key;
         const opp = isHome ? g.away : g.home;
         const loc = isHome ? "vs" : "@";
         const score = g.played ? ` — ${g.awayScore}-${g.homeScore}` : "";
         const status = g.played ? "FINAL" : "";
-        return `<div class="schedule-game" style="margin-bottom:6px"><strong>Wk ${g.week}</strong> ${loc} ${teamName(opp)} ${status}${score}</div>`;
-      }).join("");
+        lines.push(`<div class="schedule-game" style="margin-bottom:6px"><strong>Wk ${w}</strong> ${loc} ${teamName(opp)} ${status}${score}</div>`);
+      }
+      upcoming.innerHTML = lines.join("") || `<p class="empty-note">No games found.</p>`;
     }
   }
+
   const players = ROSTERS[key] || [];
   const tbody = $("team-page-roster");
   tbody.innerHTML = "";
@@ -368,6 +437,7 @@ function openTeamPage(teamIndex) {
   });
   showScreen("team-page-screen");
 }
+
 let game = null;
 function createNewGame(home, away, scheduledGame = null) {
   return {
@@ -463,23 +533,17 @@ function finishGame() {
 function processPlay() {
   if (!game || game.gameOver) return;
   const roll = {
-    d4: parseInt($("die-1").value),
-    d10_0_9: parseInt($("die-2").value),
-    d8: parseInt($("die-3").value),
-    d100_tens: parseInt($("die-4").value),
-    d20: parseInt($("die-5").value),
-    d10: parseInt($("die-6").value),
-    d6: parseInt($("die-7").value)
+    d4: parseInt($("die-1").value), d10_0_9: parseInt($("die-2").value),
+    d8: parseInt($("die-3").value), d100_tens: parseInt($("die-4").value),
+    d20: parseInt($("die-5").value), d10: parseInt($("die-6").value), d6: parseInt($("die-7").value)
   };
   if ([roll.d4, roll.d10_0_9, roll.d8, roll.d100_tens, roll.d20, roll.d10, roll.d6].some(Number.isNaN)) {
-    alert("Enter the result of all seven dice.");
-    return;
+    alert("Enter the result of all seven dice."); return;
   }
   if (roll.d4 < 1 || roll.d4 > 4 || roll.d10_0_9 < 0 || roll.d10_0_9 > 9 || roll.d8 < 1 || roll.d8 > 8 ||
       roll.d100_tens < 0 || roll.d100_tens > 90 || roll.d100_tens % 10 !== 0 ||
       roll.d20 < 1 || roll.d20 > 20 || roll.d10 < 1 || roll.d10 > 10 || roll.d6 < 1 || roll.d6 > 6) {
-    alert("One or more dice results are invalid.");
-    return;
+    alert("One or more dice results are invalid."); return;
   }
   const current = game.possession === "home" ? game.home : game.away;
   const other = game.possession === "home" ? game.away : game.home;
@@ -533,13 +597,10 @@ function processPlay() {
   applyTime(timeUsed);
   updateUI();
 }
+
 window.addEventListener("DOMContentLoaded", () => {
-  // Schedule generator script loads after this file; call after a tick if needed
   generateSchedule();
-  // If generator wasn't ready yet (empty schedule), try once more
-  if (schedule.length === 0 && window.ScheduleGenerator) {
-    generateSchedule(true);
-  }
+  if (schedule.length === 0 && window.ScheduleGenerator) generateSchedule(true);
   currentWeek = parseInt(localStorage.getItem("mfl-current-week")) || 1;
   renderWeeklyGames();
 
@@ -560,10 +621,7 @@ window.addEventListener("DOMContentLoaded", () => {
       finishGame();
     }
   });
-  $("new-game-btn").addEventListener("click", () => {
-    game = null;
-    showScreen("setup-screen");
-  });
+  $("new-game-btn").addEventListener("click", () => { game = null; showScreen("setup-screen"); });
   $("reset-standings-btn").addEventListener("click", () => {
     if (confirm("Reset all standings to 0-0?")) {
       standings = createEmptyStandings();
