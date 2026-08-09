@@ -1,0 +1,181 @@
+/* ========== LIVE GAME FIELD ========== */
+.game-field {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto 20px;
+  height: 240px;
+  border-radius: 12px;
+  border: 2px solid var(--gold, #FDB813);
+  background-color: var(--field-green, #1E7B44);
+  background-image: url("assets/field/field.png");
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.25);
+}
+
+.game-field.red-zone {
+  box-shadow: inset 0 0 50px rgba(192, 57, 43, 0.35),
+              0 0 12px rgba(192, 57, 43, 0.25);
+}
+
+.field-playable {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  z-index: 1;
+}
+
+.field-endzone {
+  width: 10%;
+  background: rgba(18, 36, 56, 0.35);
+  border-right: 2px solid rgba(255, 255, 255, 0.5);
+}
+.field-endzone-home {
+  border-right: none;
+  border-left: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.field-mid {
+  flex: 1;
+  position: relative;
+}
+
+.field-yard-lines {
+  position: absolute;
+  inset: 0;
+}
+.yard-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  transform: translateX(-50%);
+}
+
+.field-yard-numbers {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  height: 20px;
+  pointer-events: none;
+}
+.yard-num {
+  position: absolute;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 800;
+  font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.field-hashes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.35) 0 4px,
+    transparent 4px 10px
+  );
+}
+.field-hashes-top { top: 32%; }
+.field-hashes-bot { bottom: 32%; }
+
+/* Ball */
+.ball-marker {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ffe08a, #FDB813 45%, #a67c00);
+  border: 2px solid #122438;
+  box-shadow: 0 0 10px rgba(253, 184, 19, 0.8);
+  z-index: 5;
+  transition: left 0.45s ease;
+}
+.ball-marker.drive-right::after,
+.ball-marker.drive-left::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  transform: translateY(-50%);
+}
+.ball-marker.drive-right::after {
+  left: 100%;
+  border-left: 7px solid #FDB813;
+  margin-left: 2px;
+}
+.ball-marker.drive-left::after {
+  right: 100%;
+  border-right: 7px solid #FDB813;
+  margin-right: 2px;
+}
+
+/* First down (yellow line) */
+.first-down-marker {
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  width: 3px;
+  margin-left: -1.5px;
+  background: #FDB813;
+  box-shadow: 0 0 8px rgba(253, 184, 19, 0.7);
+  z-index: 4;
+  transition: left 0.45s ease;
+  border-radius: 2px;
+}
+
+/* Play movement trail */
+.play-trail {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2px;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+}
+.play-trail.flash {
+  animation: trail-fade 0.7s ease forwards;
+}
+@keyframes trail-fade {
+  0% { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+
+.field-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  z-index: 6;
+  pointer-events: none;
+}
+.field-end-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.field-end-home {
+  transform: none;
+}
