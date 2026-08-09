@@ -3,12 +3,13 @@
 // ============================================
 //
 // 17 games per team, 18 weeks, 1 explicit bye each.
-// Byes only in weeks 5–14 with this distribution:
-//   3 weeks × 2 teams on bye
-//   5 weeks × 4 teams on bye
-//   1 week  × 6 teams on bye
-//   (1 week in 5–14 has 0 byes)
-// Total: 3*2 + 5*4 + 1*6 = 32
+// Byes only in weeks 5–14:
+//   3 weeks × 2 teams, 5 weeks × 4, 1 week × 6
+// Expected games per week = (32 - byes) / 2
+//   Weeks with 0 byes → 16 games
+//   Weeks with 2 byes → 15 games
+//   Weeks with 4 byes → 14 games
+//   Weeks with 6 byes → 13 games
 //
 // ============================================
 
@@ -114,34 +115,16 @@ function buildNFLMatchups() {
 
 /**
  * Bye distribution (weeks 5–14 only):
- *   Week  5: 2 teams
- *   Week  6: 4 teams
- *   Week  7: 4 teams
- *   Week  8: 4 teams
- *   Week  9: 6 teams
- *   Week 10: 4 teams
- *   Week 11: 4 teams
- *   Week 12: 2 teams
- *   Week 13: 2 teams
- *   Week 14: 0 teams
- *
- * 3 weeks × 2 + 5 weeks × 4 + 1 week × 6 = 32 byes
+ *   Week  5: 2 | 6: 4 | 7: 4 | 8: 4 | 9: 6
+ *   Week 10: 4 | 11: 4 | 12: 2 | 13: 2 | 14: 0
  */
 function assignByeWeeks() {
   const byeWeeks = {};
   const teamsOnByeByWeek = {};
 
   const byeSlotsByWeek = {
-    5: 2,
-    6: 4,
-    7: 4,
-    8: 4,
-    9: 6,
-    10: 4,
-    11: 4,
-    12: 2,
-    13: 2
-    // week 14: 0 byes
+    5: 2, 6: 4, 7: 4, 8: 4, 9: 6,
+    10: 4, 11: 4, 12: 2, 13: 2
   };
 
   Object.keys(byeSlotsByWeek).forEach(w => {
@@ -152,17 +135,14 @@ function assignByeWeeks() {
     .slice()
     .sort((a, b) => teamName(a).localeCompare(teamName(b)));
 
-  // Build flat list of week slots: [5,5, 6,6,6,6, ...]
   const weekQueue = [];
   Object.keys(byeSlotsByWeek)
     .map(Number)
     .sort((a, b) => a - b)
     .forEach(week => {
-      const count = byeSlotsByWeek[week];
-      for (let i = 0; i < count; i++) weekQueue.push(week);
+      for (let i = 0; i < byeSlotsByWeek[week]; i++) weekQueue.push(week);
     });
 
-  // 32 slots for 32 teams
   ordered.forEach((team, index) => {
     const week = weekQueue[index];
     const key = teamKey(team);
@@ -173,79 +153,136 @@ function assignByeWeeks() {
   return { byeWeeks, teamsOnByeByWeek };
 }
 
-function assignMatchupsToWeeks(matchups) {
-  const { byeWeeks, teamsOnByeByWeek } = assignByeWeeks();
+function shuffleCopy(arr, rng) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
 
-  const rng = mulberry32(42);
-  const pool = matchups
-    .map(m => ({ m, order: rng() }))
-    .sort((a, b) => a.order - b.order)
-    .map(x => x.m);
+/**
+ * Pack one week: greedily take matchups where both teams are free
+ * (not on bye, not already playing this week).
+ * Returns { placed, leftover }
+ */
+function packWeek(week, remaining, byeWeeks, rng) {
+  const used = new Set();
+  const placed = [];
+  const leftover = [];
 
-  const teamWeeks = {};
+  // Teams on bye this week cannot play
   TEAMS.forEach(t => {
-    const key = teamKey(t);
-    teamWeeks[key] = new Set();
-    teamWeeks[key].add(byeWeeks[key]);
+    if (byeWeeks[teamKey(t)] === week) used.add(teamKey(t));
   });
 
-  const result = [];
-  const remaining = pool.slice();
+  const ordered = shuffleCopy(remaining, rng);
 
-  function canPlay(teamK, week) {
-    if (teamWeeks[teamK].has(week)) return false;
-    // size includes 1 bye → max 18 means 17 games + bye
-    if (teamWeeks[teamK].size >= 18) return false;
-    return true;
-  }
-
-  for (let pass = 0; pass < 40 && remaining.length > 0; pass++) {
-    for (let week = 1; week <= 18; week++) {
-      for (let i = remaining.length - 1; i >= 0; i--) {
-        const g = remaining[i];
-        const hk = teamKey(g.home);
-        const ak = teamKey(g.away);
-
-        if (!canPlay(hk, week) || !canPlay(ak, week)) continue;
-
-        teamWeeks[hk].add(week);
-        teamWeeks[ak].add(week);
-        result.push({
-          week,
-          home: g.home,
-          away: g.away,
-          played: false,
-          homeScore: null,
-          awayScore: null
-        });
-        remaining.splice(i, 1);
-      }
-    }
-  }
-
-  remaining.forEach(g => {
+  ordered.forEach(g => {
     const hk = teamKey(g.home);
     const ak = teamKey(g.away);
-    for (let week = 1; week <= 18; week++) {
-      if (canPlay(hk, week) && canPlay(ak, week)) {
-        teamWeeks[hk].add(week);
-        teamWeeks[ak].add(week);
-        result.push({
-          week,
-          home: g.home,
-          away: g.away,
-          played: false,
-          homeScore: null,
-          awayScore: null
-        });
-        return;
-      }
+    if (!used.has(hk) && !used.has(ak)) {
+      used.add(hk);
+      used.add(ak);
+      placed.push({
+        week,
+        home: g.home,
+        away: g.away,
+        played: false,
+        homeScore: null,
+        awayScore: null
+      });
+    } else {
+      leftover.push(g);
     }
   });
 
-  result._byeWeeks = byeWeeks;
-  result._teamsOnByeByWeek = teamsOnByeByWeek;
-  return result;
+  return { placed, leftover };
+}
+
+/**
+ * Assign all matchups to weeks.
+ * Strategy: for each attempt, walk weeks 1→18 packing each week full,
+ * then extra passes for leftovers. Retry with different shuffles until
+ * every matchup is placed (272 games).
+ */
+function assignMatchupsToWeeks(matchups) {
+  const { byeWeeks, teamsOnByeByWeek } = assignByeWeeks();
+  const TARGET = matchups.length; // 272
+
+  let best = null;
+  let bestCount = -1;
+
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const rng = mulberry32(1000 + attempt * 97);
+    let remaining = shuffleCopy(matchups, rng);
+    const result = [];
+
+    // Pass 1: pack each week once in order
+    for (let week = 1; week <= 18; week++) {
+      const { placed, leftover } = packWeek(week, remaining, byeWeeks, rng);
+      result.push(...placed);
+      remaining = leftover;
+    }
+
+    // Passes 2–6: revisit weeks for leftovers
+    for (let pass = 0; pass < 6 && remaining.length > 0; pass++) {
+      for (let week = 1; week <= 18; week++) {
+        if (remaining.length === 0) break;
+
+        // Who is already booked this week?
+        const booked = new Set();
+        TEAMS.forEach(t => {
+          if (byeWeeks[teamKey(t)] === week) booked.add(teamKey(t));
+        });
+        result.forEach(g => {
+          if (g.week === week) {
+            booked.add(teamKey(g.home));
+            booked.add(teamKey(g.away));
+          }
+        });
+
+        const still = [];
+        shuffleCopy(remaining, rng).forEach(g => {
+          const hk = teamKey(g.home);
+          const ak = teamKey(g.away);
+          // Also skip if team already has 17 games scheduled
+          const homeGames = result.filter(x => teamKey(x.home) === hk || teamKey(x.away) === hk).length;
+          const awayGames = result.filter(x => teamKey(x.home) === ak || teamKey(x.away) === ak).length;
+          if (!booked.has(hk) && !booked.has(ak) && homeGames < 17 && awayGames < 17) {
+            booked.add(hk);
+            booked.add(ak);
+            result.push({
+              week,
+              home: g.home,
+              away: g.away,
+              played: false,
+              homeScore: null,
+              awayScore: null
+            });
+          } else {
+            still.push(g);
+          }
+        });
+        remaining = still;
+      }
+    }
+
+    if (result.length > bestCount) {
+      bestCount = result.length;
+      best = result;
+    }
+    if (result.length === TARGET && remaining.length === 0) {
+      best = result;
+      break;
+    }
+  }
+
+  const finalGames = best || [];
+  finalGames._byeWeeks = byeWeeks;
+  finalGames._teamsOnByeByWeek = teamsOnByeByWeek;
+  return finalGames;
 }
 
 function buildFullNFLSchedule() {
