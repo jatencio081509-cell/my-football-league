@@ -1,14 +1,37 @@
-// Runs after renderer.js — upgrades UI with logo slots + starts loading screen
+// Runs after renderer.js — logos, week lock, playoffs hook
 (function () {
   function L() { return window.MFLLogos; }
+  function P() { return window.Playoffs; }
 
-  const _renderWeeklyGames = window.renderWeeklyGames;
   window.renderWeeklyGames = function () {
     const container = document.getElementById("weekly-games");
     if (!container) return;
     container.innerHTML = "";
     const label = document.getElementById("current-week-label");
     if (label) label.textContent = currentWeek;
+
+    const banner = document.getElementById("week-lock-banner");
+    const unlocked = P() ? P().canPlayWeek(currentWeek) : true;
+
+    if (banner) {
+      if (!unlocked) {
+        banner.classList.remove("hidden");
+        banner.innerHTML =
+          `<strong>Week ${currentWeek} is locked.</strong> ` +
+          `Finish every game in Week ${currentWeek - 1} before these games can be played.`;
+      } else {
+        const weekGamesCheck = schedule.filter(g => g.week === currentWeek);
+        const done = weekGamesCheck.length && weekGamesCheck.every(g => g.played);
+        if (done) {
+          banner.classList.remove("hidden");
+          banner.innerHTML = `<strong>Week ${currentWeek} complete.</strong> All results are in — next week is unlocked.`;
+          banner.classList.add("week-complete");
+        } else {
+          banner.classList.add("hidden");
+          banner.classList.remove("week-complete");
+        }
+      }
+    }
 
     const weekGames = schedule.filter(g => g.week === currentWeek);
     const byeKeys = teamsOnByeByWeek[String(currentWeek)] || teamsOnByeByWeek[currentWeek] || [];
@@ -20,16 +43,23 @@
 
     weekGames.forEach(scheduledGame => {
       const card = document.createElement("div");
-      card.className = "week-game-card";
+      card.className = "week-game-card" + (!unlocked && !scheduledGame.played ? " locked-game" : "");
       const awayName = teamName(scheduledGame.away);
       const homeName = teamName(scheduledGame.home);
       const awayLogo = L() ? L().slotHTML(scheduledGame.away, "logo-slot-md") : "";
       const homeLogo = L() ? L().slotHTML(scheduledGame.home, "logo-slot-md") : "";
+
       if (scheduledGame.played) {
         card.innerHTML =
           `<div class="game-teams">${awayLogo}<strong>${awayName}</strong><span class="game-score">${scheduledGame.awayScore}</span></div>` +
           `<div class="game-final">FINAL</div>` +
           `<div class="game-teams">${homeLogo}<strong>${homeName}</strong><span class="game-score">${scheduledGame.homeScore}</span></div>`;
+      } else if (!unlocked) {
+        card.innerHTML =
+          `<div class="game-teams">${awayLogo}<strong>${awayName}</strong></div>` +
+          `<div class="game-vs">@</div>` +
+          `<div class="game-teams">${homeLogo}<strong>${homeName}</strong></div>` +
+          `<button class="btn play-scheduled-game" disabled>Locked</button>`;
       } else {
         card.innerHTML =
           `<div class="game-teams">${awayLogo}<strong>${awayName}</strong></div>` +
@@ -37,6 +67,10 @@
           `<div class="game-teams">${homeLogo}<strong>${homeName}</strong></div>` +
           `<button class="btn primary play-scheduled-game">Play Game</button>`;
         card.querySelector(".play-scheduled-game").addEventListener("click", () => {
+          if (P() && !P().canPlayWeek(currentWeek)) {
+            alert(`Finish all Week ${currentWeek - 1} games first.`);
+            return;
+          }
           window.currentScheduledGame = scheduledGame;
           game = createNewGame(scheduledGame.home, scheduledGame.away, scheduledGame);
           updateUI();
@@ -49,9 +83,9 @@
     if (byeKeys.length > 0) {
       const byeBox = document.createElement("div");
       byeBox.className = "week-game-card";
-      byeBox.style.borderColor = "#475569";
+      byeBox.style.borderColor = "#6b8499";
       byeBox.innerHTML =
-        `<div style="color:#94a3b8;font-weight:600;margin-bottom:6px">BYE WEEK</div>` +
+        `<div style="color:#a8bdd0;font-weight:600;margin-bottom:6px">BYE WEEK</div>` +
         `<div style="color:#e2e8f0">${byeKeys.map(teamNameFromKey).join(" · ")}</div>`;
       container.appendChild(byeBox);
     }
@@ -76,17 +110,6 @@
     if (team && L()) L().fillTeamSlot(document.getElementById("team-page-logo-slot"), team);
   };
 
-  const _renderSchedule = window.renderSchedule;
-  window.renderSchedule = function () {
-    if (typeof _renderSchedule === "function") _renderSchedule();
-    // Enhance existing schedule rows with logos if missing
-    if (!L()) return;
-    document.querySelectorAll(".schedule-game").forEach(row => {
-      if (row.querySelector(".logo-slot")) return;
-      // leave original schedule text; weekly + team page carry the main logos
-    });
-  };
-
   const _renderStandings = window.renderStandings;
   window.renderStandings = function () {
     if (typeof _renderStandings === "function") _renderStandings();
@@ -104,12 +127,17 @@
     });
   };
 
+  const _showScreen = window.showScreen;
+  window.showScreen = function (id) {
+    if (typeof _showScreen === "function") _showScreen(id);
+    if (id === "playoffs-screen" && P()) P().renderPlayoffs();
+  };
+
   window.addEventListener("DOMContentLoaded", () => {
     if (L()) {
       L().startLoadingScreen();
       L().fillAppLogos();
     }
-    // Re-render weekly games with logos after our override is in place
     if (typeof window.renderWeeklyGames === "function") {
       window.renderWeeklyGames();
     }
