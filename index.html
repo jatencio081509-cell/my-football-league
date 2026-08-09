@@ -37,6 +37,7 @@
         <button class="sidebar-btn active" data-screen="setup-screen">Play Game</button>
         <button class="sidebar-btn" data-screen="schedule-screen">Schedule</button>
         <button class="sidebar-btn" data-screen="standings-screen">Standings</button>
+        <button class="sidebar-btn" data-screen="playoffs-screen">Playoffs</button>
         <button class="sidebar-btn" data-screen="awards-screen">Awards</button>
       </nav>
       <div class="sidebar-footer"><p>Dice League</p></div>
@@ -51,6 +52,7 @@
             <button id="next-week-btn" class="btn small">Next →</button>
           </div>
         </div>
+        <div id="week-lock-banner" class="week-lock-banner hidden"></div>
         <div id="weekly-games" class="weekly-games"></div>
       </div>
 
@@ -141,6 +143,13 @@
         <div id="schedule-container" class="schedule-container"></div>
       </div>
 
+      <div id="playoffs-screen" class="screen hidden">
+        <div class="standings-header">
+          <h2>Playoffs</h2>
+        </div>
+        <div id="playoffs-container" class="playoffs-container"></div>
+      </div>
+
       <div id="awards-screen" class="screen hidden">
         <div class="standings-header">
           <h2>League Awards</h2>
@@ -193,6 +202,7 @@
   <script src="logos.js"></script>
   <script src="renderer.js"></script>
   <script src="scheduleGenerator.js"></script>
+  <script src="playoffs.js"></script>
   <script src="logoIntegrate.js"></script>
 </body>
 </html>
