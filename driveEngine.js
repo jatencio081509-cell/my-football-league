@@ -6,7 +6,6 @@
 // ============================================
 
 window.DriveEngine = {
-  /** Map dice → drive outcome (not a single play). */
   resolveDriveFromDice(roll, game) {
     const combinationIndex =
       ((((((roll.d4 - 1) * 10 + roll.d10_0_9)
@@ -17,7 +16,6 @@ window.DriveEngine = {
       * 6 + (roll.d6 - 1);
     const position = combinationIndex / 3840000;
 
-    // Weighted drive endings (rough NFL-ish)
     const table = [
       { id: "touchdown", weight: 0.22 },
       { id: "field_goal", weight: 0.14 },
@@ -27,7 +25,7 @@ window.DriveEngine = {
       { id: "turnover_fumble", weight: 0.05 },
       { id: "turnover_downs", weight: 0.10 },
       { id: "safety", weight: 0.02 },
-      { id: "big_stop_punt", weight: 0.04 } // 3-and-out style
+      { id: "big_stop_punt", weight: 0.04 }
     ];
     const total = table.reduce((s, t) => s + t.weight, 0);
     let run = 0;
@@ -37,12 +35,10 @@ window.DriveEngine = {
       if (position < run) { pick = row; break; }
     }
 
-    // Field-position sanity: hard to score TD from own 5, etc.
     const yl = game.yardLine;
     if (pick.id === "touchdown" && yl < 15 && position > 0.08) pick = { id: "punt" };
-    if (pick.id === "field_goal" && yl < 40) pick = { id: "punt" };
-    if (pick.id === "safety" && yl > 25) pick = { id: "punt" };
     if ((pick.id === "field_goal" || pick.id === "missed_fg") && yl < 45) pick = { id: "punt" };
+    if (pick.id === "safety" && yl > 25) pick = { id: "punt" };
 
     return { id: pick.id, position };
   },
@@ -55,88 +51,104 @@ window.DriveEngine = {
     return arr[Math.floor(Math.random() * arr.length)];
   },
 
-  /**
-   * Build a list of play steps that lead to `outcome`.
-   * Each step: { yards, time, text, downDelta?, special? }
-   * special: 'td'|'fg'|'miss_fg'|'punt'|'int'|'fumble'|'downs'|'safety'
-   */
+  /** Intermediate gains that roughly spend `budget` yards toward the target. */
+  pushSeries(plays, budget, maxPlays) {
+    let left = Math.max(0, budget);
+    const count = this.rand(2, maxPlays);
+    for (let i = 0; i < count - 1 && left > 2; i++) {
+      const roll = Math.random();
+      let y;
+      if (roll < 0.12) y = -this.rand(1, 4);
+      else if (roll < 0.22) y = 0;
+      else y = this.rand(1, Math.min(12, left));
+
+      if (y > 0) {
+        left -= y;
+        plays.push({
+          yards: y,
+          time: this.rand(22, 38),
+          text: this.pick([
+            `Run up the middle for ${y}`,
+            `Short pass complete for ${y}`,
+            `Sweep picks up ${y}`,
+            `Quick slant for ${y} yards`,
+            `Off-tackle for ${y}`
+          ]),
+          special: null
+        });
+      } else if (y === 0) {
+        plays.push({
+          yards: 0,
+          time: this.rand(18, 28),
+          text: this.pick(["Incomplete pass", "Stuffed at the line", "Pass broken up", "No gain"]),
+          special: null
+        });
+      } else {
+        left += Math.abs(y);
+        plays.push({
+          yards: y,
+          time: this.rand(20, 32),
+          text: this.pick([
+            `Tackled for a loss of ${Math.abs(y)}`,
+            `Sack — loss of ${Math.abs(y)}`,
+            `Loss of ${Math.abs(y)} on the play`
+          ]),
+          special: null
+        });
+      }
+    }
+    return left;
+  },
+
   generatePlays(game, outcome) {
     const plays = [];
     const start = game.yardLine;
     const needForTd = Math.max(1, 100 - start);
 
-    const add = (yards, time, text, special) => {
-      plays.push({ yards, time, text, special: special || null });
-    };
-
-    const nibble = (remaining, maxPlays) => {
-      // Generate intermediate gains/losses that leave `remaining` yards for the last push
-      let left = remaining;
-      const count = this.rand(2, maxPlays);
-      for (let i = 0; i < count - 1 && left > 3; i++) {
-        const maxGain = Math.min(12, Math.max(1, left - 1));
-        let y;
-        const roll = Math.random();
-        if (roll < 0.12) y = -this.rand(1, 4); // loss
-        else if (roll < 0.22) y = 0; // stuff / incomplete
-        else y = this.rand(1, maxGain);
-        left -= Math.max(0, y);
-        if (y > 0) add(y, this.rand(22, 38), this.pick([
-          `Run up the middle for ${y}`,
-          `Short pass complete, gain of ${y}`,
-          `Sweep picks up ${y}`,
-          `Quick slant for ${y} yards`,
-          `Off-tackle run for ${y}`
-        ]));
-        else if (y === 0) add(0, this.rand(18, 28), this.pick([
-          "Incomplete pass",
-          "Run stuffed at the line",
-          "Pass broken up",
-          "No gain"
-        ]));
-        else add(y, this.rand(20, 32), this.pick([
-          `Tackled for a loss of ${Math.abs(y)}`,
-          `Sack — loss of ${Math.abs(y)}`,
-          `Run meets the defense, loss of ${Math.abs(y)}`
-        ]));
-      }
-      return left;
-    };
-
     switch (outcome.id) {
       case "touchdown": {
-        const left = nibble(needForTd, this.rand(4, 9));
+        const left = this.pushSeries(plays, needForTd, this.rand(4, 9));
         const finalGain = Math.max(1, left);
-        add(finalGain, this.rand(28, 42), this.pick([
-          `TOUCHDOWN! ${finalGain}-yard strike into the end zone`,
-          `TOUCHDOWN run — ${finalGain} yards`,
-          `Breaks free for a ${finalGain}-yard TOUCHDOWN`
-        ]), "td");
+        plays.push({
+          yards: finalGain,
+          time: this.rand(28, 42),
+          text: this.pick([
+            `TOUCHDOWN! ${finalGain}-yard score`,
+            `Breaks free — ${finalGain}-yard TOUCHDOWN`,
+            `TOUCHDOWN pass for ${finalGain}`
+          ]),
+          special: "td"
+        });
         break;
       }
       case "field_goal": {
-        // Advance into FG range if needed, then kick
-        let target = Math.max(start, this.rand(55, 75));
-        if (target > 99) target = 99;
-        const gainNeeded = Math.max(0, target - start);
-        if (gainNeeded > 0) nibble(gainNeeded, this.rand(3, 7));
-        // After nibbles yard tracking is applied later; FG is special
-        add(0, this.rand(12, 18), this.pick([
-          "Field goal is GOOD",
-          "The kick splits the uprights — FIELD GOAL",
-          "Chip-shot field goal is good"
-        ]), "fg");
+        const target = Math.min(99, Math.max(start, this.rand(55, 78)));
+        this.pushSeries(plays, Math.max(0, target - start), this.rand(3, 7));
+        plays.push({
+          yards: 0,
+          time: this.rand(12, 18),
+          text: this.pick([
+            "Field goal is GOOD",
+            "The kick is good — FIELD GOAL",
+            "Splits the uprights for three"
+          ]),
+          special: "fg"
+        });
         break;
       }
       case "missed_fg": {
-        let target = Math.max(start, this.rand(50, 70));
-        const gainNeeded = Math.max(0, target - start);
-        if (gainNeeded > 0) nibble(gainNeeded, this.rand(2, 6));
-        add(0, this.rand(12, 18), this.pick([
-          "Field goal is NO good — wide right",
-          "The kick misses left",
-          "Field goal attempt is short"
-        ]), "miss_fg");
+        const target = Math.min(99, Math.max(start, this.rand(50, 70)));
+        this.pushSeries(plays, Math.max(0, target - start), this.rand(2, 6));
+        plays.push({
+          yards: 0,
+          time: this.rand(12, 18),
+          text: this.pick([
+            "Field goal is NO good",
+            "Kick misses wide",
+            "Field goal attempt is short"
+          ]),
+          special: "miss_fg"
+        });
         break;
       }
       case "punt":
@@ -144,75 +156,98 @@ window.DriveEngine = {
         const stops = outcome.id === "big_stop_punt" ? 3 : this.rand(3, 6);
         for (let i = 0; i < stops - 1; i++) {
           const y = Math.random() < 0.35 ? this.rand(0, 4) : this.rand(-2, 8);
-          if (y > 0) add(y, this.rand(22, 35), `Gain of ${y} on ${this.pick(["run", "short pass", "screen"])}`);
-          else if (y === 0) add(0, this.rand(18, 28), this.pick(["Incomplete", "No gain", "Pass defended"]));
-          else add(y, this.rand(20, 30), `Loss of ${Math.abs(y)}`);
+          plays.push({
+            yards: y,
+            time: this.rand(20, 34),
+            text: y > 0
+              ? `Gain of ${y} on ${this.pick(["run", "short pass", "screen"])}`
+              : y === 0
+                ? this.pick(["Incomplete", "No gain", "Pass defended"])
+                : `Loss of ${Math.abs(y)}`,
+            special: null
+          });
         }
         const puntY = this.rand(35, 52);
-        add(puntY, this.rand(12, 20), `Punt — ${puntY} yards", "punt");
-        // fix quote typo below
+        plays.push({
+          yards: puntY,
+          time: this.rand(12, 20),
+          text: `Punt — ${puntY} yards`,
+          special: "punt"
+        });
         break;
       }
       case "turnover_int": {
         const n = this.rand(1, 4);
         for (let i = 0; i < n - 1; i++) {
           const y = this.rand(0, 9);
-          add(y, this.rand(20, 32), y ? `Complete for ${y}` : "Incomplete");
+          plays.push({
+            yards: y,
+            time: this.rand(20, 32),
+            text: y ? `Complete for ${y}` : "Incomplete",
+            special: null
+          });
         }
-        add(0, this.rand(15, 25), this.pick([
-          "INTERCEPTION!",
-          "Picked off in coverage",
-          "The pass is intercepted"
-        ]), "int");
+        plays.push({
+          yards: 0,
+          time: this.rand(15, 25),
+          text: this.pick(["INTERCEPTION!", "Picked off in coverage", "The pass is intercepted"]),
+          special: "int"
+        });
         break;
       }
       case "turnover_fumble": {
         const n = this.rand(1, 5);
         for (let i = 0; i < n - 1; i++) {
           const y = this.rand(-1, 10);
-          add(y, this.rand(20, 34), y >= 0 ? `Play gains ${y}` : `Loss of ${Math.abs(y)}`);
+          plays.push({
+            yards: y,
+            time: this.rand(20, 34),
+            text: y >= 0 ? `Play gains ${y}` : `Loss of ${Math.abs(y)}`,
+            special: null
+          });
         }
-        add(0, this.rand(15, 25), this.pick([
-          "FUMBLE! Defense recovers",
-          "Ball is loose — recovered by the defense",
-          "Strip sack, fumble recovered"
-        ]), "fumble");
+        plays.push({
+          yards: 0,
+          time: this.rand(15, 25),
+          text: this.pick(["FUMBLE! Defense recovers", "Ball is loose — defense recovers", "Strip sack, fumble recovered"]),
+          special: "fumble"
+        });
         break;
       }
       case "turnover_downs": {
         for (let i = 0; i < 4; i++) {
           const y = this.rand(-2, 6);
           const last = i === 3;
-          add(y, this.rand(20, 35),
-            last
-              ? (y < 10 ? "Fourth down — short of the marker. Turnover on downs" : `Fourth down conversion for ${y}`)
-              : (y > 0 ? `Gain of ${y}` : y === 0 ? "No gain" : `Loss of ${Math.abs(y)}`),
-            last ? "downs" : null
-          );
+          plays.push({
+            yards: last ? Math.min(y, 3) : y,
+            time: this.rand(20, 35),
+            text: last
+              ? "Fourth down — short of the marker. Turnover on downs"
+              : y > 0
+                ? `Gain of ${y}`
+                : y === 0
+                  ? "No gain"
+                  : `Loss of ${Math.abs(y)}`,
+            special: last ? "downs" : null
+          });
         }
-        // Force last to be downs stop — mark special on last
-        if (plays.length) plays[plays.length - 1].special = "downs";
         break;
       }
       case "safety": {
-        add(-Math.min(start, this.rand(2, 8)), this.rand(18, 28), "Tackled in the end zone — SAFETY", "safety");
+        plays.push({
+          yards: -Math.min(start, this.rand(2, 8)),
+          time: this.rand(18, 28),
+          text: "Tackled in the end zone — SAFETY",
+          special: "safety"
+        });
         break;
       }
       default: {
+        plays.push({ yards: 0, time: 22, text: "Three-and-out", special: null });
         const puntY = this.rand(38, 50);
-        add(0, 25, "Three-and-out");
-        add(puntY, 15, `Punt — ${puntY} yards`, "punt");
+        plays.push({ yards: puntY, time: 15, text: `Punt — ${puntY} yards`, special: "punt" });
       }
     }
-
-    // Fix accidental typo in punt text if any
-    plays.forEach(p => {
-      if (p.text && p.text.includes('Punt') && p.text.includes('"')) {
-        p.text = p.text.replace(/".*/, "");
-        if (!p.special) p.special = "punt";
-      }
-    });
-
     return plays;
   },
 
