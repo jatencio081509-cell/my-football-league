@@ -1,11 +1,15 @@
-// Drive mode: one dice roll → drive result → auto plays (clock still ticks)
+// Drive mode: dice → queue → step through plays (Next / Auto)
 (function () {
   function DE() { return window.DriveEngine; }
   function F() { return window.FieldVisual; }
+  function PS() { return window.PlayerSystem; }
 
-  let driveBusy = false;
+  let pendingSteps = [];
+  let stepIndex = 0;
+  let autoMode = false;
+  let autoTimer = null;
+  let driveActive = false;
 
-  // Track drive start when game is created / possession changes
   const _createNewGame = window.createNewGame;
   window.createNewGame = function (home, away, scheduledGame) {
     const g = typeof _createNewGame === "function"
@@ -13,17 +17,55 @@
       : null;
     if (g) {
       g.driveStartYard = g.yardLine;
-      g.driveStartAbs = null; // filled by FieldVisual
+      g.driveStartAbs = null;
     }
+    resetDriveUI();
     return g;
   };
 
   function markDriveStart() {
     if (!game) return;
     game.driveStartYard = game.yardLine;
-    if (F()) {
-      game.driveStartAbs = F().absFromAway(game);
+    if (F()) game.driveStartAbs = F().absFromAway(game);
+  }
+
+  function setDriveControls(state) {
+    // state: 'dice' | 'stepping' | 'idle'
+    const diceBox = document.querySelector(".dice-inputs");
+    const resolveBtn = document.getElementById("submit-dice-roll");
+    const nextBtn = document.getElementById("next-play-btn");
+    const autoBtn = document.getElementById("auto-play-btn");
+    const status = document.getElementById("drive-status");
+
+    if (state === "stepping") {
+      if (diceBox) diceBox.style.opacity = "0.45";
+      if (resolveBtn) resolveBtn.disabled = true;
+      if (nextBtn) { nextBtn.disabled = false; nextBtn.classList.remove("hidden"); }
+      if (autoBtn) { autoBtn.disabled = false; autoBtn.classList.remove("hidden"); }
+      if (status) status.textContent = autoMode
+        ? `Auto-playing… (${stepIndex + 1}/${pendingSteps.length})`
+        : `Play ${stepIndex + 1} of ${pendingSteps.length} — press Next Play`;
+    } else {
+      if (diceBox) diceBox.style.opacity = "1";
+      if (resolveBtn) resolveBtn.disabled = false;
+      if (nextBtn) { nextBtn.disabled = true; }
+      if (autoBtn) {
+        autoBtn.disabled = true;
+        autoBtn.textContent = "Auto Play";
+      }
+      autoMode = false;
+      if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+      if (status) status.textContent = "Roll dice and resolve a drive.";
     }
+  }
+
+  function resetDriveUI() {
+    pendingSteps = [];
+    stepIndex = 0;
+    driveActive = false;
+    autoMode = false;
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+    setDriveControls("idle");
   }
 
   function applySpecial(special) {
@@ -33,7 +75,6 @@
         if (game.possession === "home") game.homeScore += 7;
         else game.awayScore += 7;
         game.playLog.push("*** TOUCHDOWN — PAT good (+7) ***");
-        // Kickoff the other way
         switchPossession();
         game.yardLine = 25;
         markDriveStart();
@@ -47,18 +88,12 @@
         markDriveStart();
         break;
       case "miss_fg":
-        // Opponent takes over roughly at the LOS (spot of kick ~ current)
         switchPossession();
         flipField();
         game.down = 1;
         game.distance = 10;
         markDriveStart();
         break;
-      case "punt": {
-        // yards already in step; treat yardLine advance as punt distance then flip
-        // process step already added yards toward opponent; for punt we set field after
-        break;
-      }
       case "int":
       case "fumble":
       case "downs":
@@ -83,15 +118,24 @@
     }
   }
 
+  function applyStats(step) {
+    if (!PS() || !step.statPatches) return;
+    step.statPatches.forEach(sp => {
+      if (sp && sp.team && sp.player && sp.patch) {
+        PS().addStat(sp.team, sp.player, sp.patch);
+      }
+    });
+  }
+
   function applyPlayStep(step) {
     if (!game || game.gameOver) return;
 
+    applyStats(step);
+
     if (step.special === "punt") {
-      // Net field after punt: from current LOS, ball travels step.yards, then possession flips
       const afterKick = game.yardLine + step.yards;
       game.playLog.push(step.text);
       switchPossession();
-      // Opponent field position from their own goal
       let spot = 100 - afterKick;
       if (spot < 1) spot = 20;
       if (spot > 80) spot = 20;
@@ -104,7 +148,6 @@
       return;
     }
 
-    // Normal yardage
     if (step.special !== "fg" && step.special !== "miss_fg" && step.special !== "int" && step.special !== "fumble") {
       game.yardLine += step.yards;
       if (game.yardLine < 0) game.yardLine = 0;
@@ -119,38 +162,49 @@
           game.down += 1;
           game.distance -= step.yards;
           if (game.distance < 1) game.distance = 1;
-          if (game.down > 4 && !step.special) {
-            // safety net
-            step.special = "downs";
-          }
         }
       }
     }
 
-    game.playLog.push(step.text);
+    game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
 
-    if (step.special === "td") {
-      game.yardLine = 100;
-    }
+    if (step.special === "td") game.yardLine = 100;
 
     applySpecial(step.special);
     applyTime(step.time);
     updateUI();
   }
 
-  function runDriveSequence(steps, i) {
-    if (!game || game.gameOver || i >= steps.length) {
-      driveBusy = false;
-      const btn = document.getElementById("submit-dice-roll");
-      if (btn) btn.disabled = false;
+  function finishDrive() {
+    driveActive = false;
+    pendingSteps = [];
+    stepIndex = 0;
+    setDriveControls("idle");
+  }
+
+  function advanceOnePlay() {
+    if (!driveActive || !game || game.gameOver) {
+      finishDrive();
       return;
     }
-    applyPlayStep(steps[i]);
-    setTimeout(() => runDriveSequence(steps, i + 1), 650);
+    if (stepIndex >= pendingSteps.length) {
+      finishDrive();
+      return;
+    }
+    applyPlayStep(pendingSteps[stepIndex]);
+    stepIndex += 1;
+    if (stepIndex >= pendingSteps.length || game.gameOver) {
+      finishDrive();
+      return;
+    }
+    setDriveControls("stepping");
+    if (autoMode) {
+      autoTimer = setTimeout(advanceOnePlay, 700);
+    }
   }
 
   window.processDrive = function () {
-    if (!game || game.gameOver || driveBusy) return;
+    if (!game || game.gameOver || driveActive) return;
     if (!DE()) {
       alert("Drive engine failed to load.");
       return;
@@ -170,52 +224,74 @@
       return;
     }
 
-    driveBusy = true;
-    const btn = document.getElementById("submit-dice-roll");
-    if (btn) btn.disabled = true;
-
-    // Drive starts here
     markDriveStart();
 
     const outcome = DE().resolveDriveFromDice(roll, game);
     const title = DE().outcomeTitle(outcome.id);
-    game.playLog.push("——— " + title + " ——-");
-    if (window.formatDiceRoll) {
-      game.playLog.push("Dice: " + formatDiceRoll(roll));
+    let header = "——— " + title + " ——-";
+    if (outcome.oRating != null) {
+      header += `  (Off ${outcome.oRating} vs Def ${outcome.dRating})`;
     }
+    game.playLog.push(header);
+    if (window.formatDiceRoll) game.playLog.push("Dice: " + formatDiceRoll(roll));
 
-    const steps = DE().generatePlays(game, outcome);
+    pendingSteps = DE().generatePlays(game, outcome);
+    stepIndex = 0;
+    driveActive = true;
+    autoMode = false;
+
     ["die-1", "die-2", "die-3", "die-4", "die-5", "die-6", "die-7"].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = "";
     });
 
     updateUI();
-    runDriveSequence(steps, 0);
+    setDriveControls("stepping");
   };
 
-  // Replace old per-play handlers
   window.addEventListener("DOMContentLoaded", () => {
+    // Ensure depth charts
+    if (PS()) PS().applyDepthCharts();
+
+    // Inject control row if missing
+    const playEntry = document.querySelector(".play-entry");
+    if (playEntry && !document.getElementById("next-play-btn")) {
+      const row = document.createElement("div");
+      row.className = "drive-controls";
+      row.innerHTML = `
+        <p id="drive-status" class="drive-status">Roll dice and resolve a drive.</p>
+        <div class="drive-control-buttons">
+          <button id="next-play-btn" class="btn primary" disabled>Next Play</button>
+          <button id="auto-play-btn" class="btn" disabled>Auto Play</button>
+        </div>`;
+      const submit = document.getElementById("submit-dice-roll");
+      if (submit && submit.parentNode) {
+        submit.parentNode.insertBefore(row, submit.nextSibling);
+      } else {
+        playEntry.appendChild(row);
+      }
+    }
+
     const rollBtn = document.getElementById("roll-play-btn");
     const submitBtn = document.getElementById("submit-dice-roll");
+
     if (rollBtn) {
       const clone = rollBtn.cloneNode(true);
       rollBtn.parentNode.replaceChild(clone, rollBtn);
-      clone.addEventListener("click", () => {
-        // optional: still allow random fill if they want
-        if (window.rollAllDice) {
-          const r = rollAllDice();
-          document.getElementById("die-1").value = r.d4;
-          document.getElementById("die-2").value = r.d10_0_9;
-          document.getElementById("die-3").value = r.d8;
-          document.getElementById("die-4").value = r.d100_tens;
-          document.getElementById("die-5").value = r.d20;
-          document.getElementById("die-6").value = r.d10;
-          document.getElementById("die-7").value = r.d6;
-        }
-      });
       clone.textContent = "Fill random (test)";
+      clone.addEventListener("click", () => {
+        if (!window.rollAllDice) return;
+        const r = rollAllDice();
+        document.getElementById("die-1").value = r.d4;
+        document.getElementById("die-2").value = r.d10_0_9;
+        document.getElementById("die-3").value = r.d8;
+        document.getElementById("die-4").value = r.d100_tens;
+        document.getElementById("die-5").value = r.d20;
+        document.getElementById("die-6").value = r.d10;
+        document.getElementById("die-7").value = r.d6;
+      });
     }
+
     if (submitBtn) {
       const clone2 = submitBtn.cloneNode(true);
       submitBtn.parentNode.replaceChild(clone2, submitBtn);
@@ -224,13 +300,43 @@
       clone2.addEventListener("click", () => window.processDrive());
     }
 
-    // Update labels
+    const nextBtn = document.getElementById("next-play-btn");
+    const autoBtn = document.getElementById("auto-play-btn");
+    if (nextBtn) {
+      nextBtn.addEventListener("click", () => {
+        if (autoMode) return;
+        advanceOnePlay();
+      });
+    }
+    if (autoBtn) {
+      autoBtn.addEventListener("click", () => {
+        if (!driveActive) return;
+        autoMode = !autoMode;
+        autoBtn.textContent = autoMode ? "Pause Auto" : "Auto Play";
+        if (autoMode) advanceOnePlay();
+        else if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+        setDriveControls("stepping");
+      });
+    }
+
     const h3 = document.querySelector(".play-entry h3");
     if (h3) h3.textContent = "Roll for Drive";
     const instr = document.querySelector(".dice-instructions");
     if (instr) {
       instr.textContent =
-        "Roll all seven dice once per drive. The result sets how the drive ends; plays are generated automatically and still run the clock.";
+        "Roll once per drive. Then use Next Play to step through, or Auto Play to run them out. Clock still ticks per play type.";
+    }
+
+    // Style for controls
+    if (!document.getElementById("drive-ctrl-style")) {
+      const s = document.createElement("style");
+      s.id = "drive-ctrl-style";
+      s.textContent = `
+        .drive-controls { margin: 14px 0 10px; }
+        .drive-status { color: var(--text-muted, #a8bdd0); margin-bottom: 8px; font-size: 0.9rem; }
+        .drive-control-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+      `;
+      document.head.appendChild(s);
     }
   });
 })();
