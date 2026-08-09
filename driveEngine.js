@@ -1,8 +1,7 @@
 // ============================================
 // DRIVE ENGINE
-// - Dice + team/player ratings → drive result
-// - Sensible FG / punt / field-position rules
-// - Generated plays name starters + carry stats
+// Punt = 4th down only
+// FG = 4th down OR time running out (in range)
 // ============================================
 
 window.DriveEngine = {
@@ -44,7 +43,20 @@ window.DriveEngine = {
     return game.possession === "home" ? game.away : game.home;
   },
 
-  /** Base weights adjusted by starter unit ratings + field position. */
+  /** Late-clock FG window (2-min / end of half or game). */
+  timeRunningOut(game) {
+    if (!game) return false;
+    const c = game.clockSeconds || 0;
+    const q = game.quarter || 1;
+    if (c <= 35) return true;
+    if ((q === 2 || q >= 4) && c <= 55) return true;
+    return false;
+  },
+
+  inFgRange(yardLine) {
+    return yardLine >= 60; // own 60+ → about opp 40 or closer
+  },
+
   resolveDriveFromDice(roll, game) {
     const combinationIndex =
       ((((((roll.d4 - 1) * 10 + roll.d10_0_9)
@@ -60,39 +72,30 @@ window.DriveEngine = {
     const def = this.defenseTeam(game);
     const oRating = PS ? PS.offenseOverall(off) : 75;
     const dRating = PS ? PS.defenseOverall(def) : 75;
-    const edge = (oRating - dRating) / 100; // ~-0.3 .. +0.3
+    const edge = (oRating - dRating) / 100;
 
     const yl = game.yardLine;
-    const inFgRange = yl >= 60; // own 60+ ≈ opp 40 or closer
+    const fgOk = this.inFgRange(yl);
     const deepOwn = yl <= 20;
     const redZone = yl >= 80;
+    const late = this.timeRunningOut(game);
 
-    // Base weights
     let w = {
       touchdown: 0.18 + edge * 0.12 + (redZone ? 0.12 : 0),
-      field_goal: 0.12 + (inFgRange ? 0.10 : -0.08),
-      missed_fg: 0.04,
-      punt: 0.30 - edge * 0.08,
-      turnover_int: 0.07 - edge * 0.04 + (dRating - 70) * 0.001,
+      // FG weight only if already in range OR drive can march there; still resolved on 4th/late
+      field_goal: 0.10 + (fgOk ? 0.10 : 0.04) + (late && fgOk ? 0.08 : 0),
+      missed_fg: 0.03 + (fgOk ? 0.02 : 0),
+      punt: 0.28 - edge * 0.08,
+      turnover_int: 0.07 - edge * 0.04,
       turnover_fumble: 0.05,
       turnover_downs: 0.10 - edge * 0.03,
       safety: deepOwn ? 0.03 : 0.005,
-      big_stop_punt: 0.05 - edge * 0.02
+      big_stop_punt: 0.06 - edge * 0.02
     };
 
-    // Hard rules: never punt in clear FG range; never FG out of range
-    if (inFgRange) {
-      w.punt = 0;
-      w.big_stop_punt = 0;
-      w.field_goal = Math.max(w.field_goal, 0.18);
-    } else {
-      w.field_goal = 0;
-      w.missed_fg = 0;
-    }
     if (!deepOwn) w.safety = 0.005;
     if (yl < 35) w.touchdown *= 0.55;
 
-    // Normalize
     let sum = Object.values(w).reduce((a, b) => a + Math.max(0, b), 0);
     const entries = Object.keys(w).map(id => ({ id, weight: Math.max(0, w[id]) / sum }));
 
@@ -103,26 +106,16 @@ window.DriveEngine = {
       if (position < run) { pick = row; break; }
     }
 
-    // Final safety net
-    if ((pick.id === "punt" || pick.id === "big_stop_punt") && inFgRange) {
-      pick = { id: Math.random() < 0.75 ? "field_goal" : "missed_fg" };
-    }
-    if ((pick.id === "field_goal" || pick.id === "missed_fg") && !inFgRange) {
-      pick = { id: "punt" };
-    }
-
     return { id: pick.id, position, oRating, dRating };
   },
 
-  /** Attach involved starters + stat deltas to a play object. */
   withPersonnel(game, play, roles) {
     const PS = window.PlayerSystem;
     const off = this.offenseTeam(game);
     const def = this.defenseTeam(game);
     play.actors = {};
-    play.statPatches = []; // { team, player, patch }
-
-    if (!PS) return play;
+    play.statPatches = [];
+    if (!PS || !roles) return play;
 
     if (roles.qb) {
       const qb = PS.pickStarter(off, ["QB"]);
@@ -171,25 +164,14 @@ window.DriveEngine = {
       if (y >= 12) type = "run_big";
       else if (y >= 5) type = "run_medium";
       else type = y <= 0 ? "stuff" : "run_short";
-      play = {
-        yards: y,
-        time: this.clockFor(type),
-        playType: type,
-        special: null,
-        text: "" // filled after personnel
-      };
+      play = { yards: y, time: this.clockFor(type), playType: type, special: null, text: "" };
       this.withPersonnel(game, play, {
         rb: () => ({ rushYds: Math.max(0, y), rushTd: 0 }),
         def: y <= 0 ? () => ({ tackles: 1 }) : null
       });
-      const rb = play.actors.rb;
-      const name = rb ? rb.name : "RB";
+      const name = play.actors.rb ? play.actors.rb.name : "RB";
       play.text = y > 0
-        ? this.pick([
-            `${name} runs up the middle for ${y}`,
-            `${name} off-tackle for ${y}`,
-            `${name} sweeps for ${y}`
-          ])
+        ? this.pick([`${name} runs up the middle for ${y}`, `${name} off-tackle for ${y}`, `${name} sweeps for ${y}`])
         : y === 0
           ? `${name} stuffed at the line — no gain`
           : `${name} tackled for a loss of ${Math.abs(y)}`;
@@ -199,10 +181,7 @@ window.DriveEngine = {
     if (kind === "pass") {
       if (y === 0) {
         play = { yards: 0, time: this.clockFor("incomplete"), playType: "incomplete", special: null, text: "" };
-        this.withPersonnel(game, play, {
-          qb: () => ({}),
-          def: () => ({ deflections: 1 })
-        });
+        this.withPersonnel(game, play, { qb: () => ({}), def: () => ({ deflections: 1 }) });
         const qb = play.actors.qb;
         play.text = this.pick([
           `${qb ? qb.name : "QB"} incomplete`,
@@ -219,9 +198,7 @@ window.DriveEngine = {
         qb: () => ({ passYds: y }),
         wr: () => ({ recYds: y, receptions: 1 })
       });
-      const qb = play.actors.qb;
-      const wr = play.actors.wr;
-      play.text = `${qb ? qb.name : "QB"} to ${wr ? wr.name : "WR"} for ${y}`;
+      play.text = `${play.actors.qb ? play.actors.qb.name : "QB"} to ${play.actors.wr ? play.actors.wr.name : "WR"} for ${y}`;
       return play;
     }
 
@@ -231,8 +208,7 @@ window.DriveEngine = {
         qb: () => ({}),
         sacker: () => ({ sacks: 1, tackles: 1 })
       });
-      const s = play.actors.sacker;
-      play.text = `Sack by ${s ? s.name : "defense"} — loss of ${Math.abs(y)}`;
+      play.text = `Sack by ${play.actors.sacker ? play.actors.sacker.name : "defense"} — loss of ${Math.abs(y)}`;
       return play;
     }
 
@@ -242,128 +218,272 @@ window.DriveEngine = {
         qb: () => ({ passYds: Math.max(0, y) }),
         rb: () => ({ recYds: Math.max(0, y), receptions: y > 0 ? 1 : 0 })
       });
-      const rb = play.actors.rb;
-      play.text = `Screen to ${rb ? rb.name : "RB"} for ${y}`;
+      play.text = `Screen to ${play.actors.rb ? play.actors.rb.name : "RB"} for ${y}`;
       return play;
     }
 
     return { yards: y, time: 25, playType: "run_short", special: null, text: `Gain of ${y}`, actors: {}, statPatches: [] };
   },
 
-  pushSeries(game, plays, budget, maxPlays) {
-    let left = Math.max(0, budget);
-    const count = this.rand(2, maxPlays);
-    for (let i = 0; i < count - 1 && left > 2; i++) {
-      const roll = Math.random();
-      if (roll < 0.10) {
-        const loss = -this.rand(1, 4);
-        left += Math.abs(loss);
-        plays.push(this.makePlay(game, "sack", loss));
-      } else if (roll < 0.22) {
-        plays.push(this.makePlay(game, "pass", 0));
-      } else if (roll < 0.55) {
-        const y = this.rand(1, Math.min(12, left));
-        left -= y;
-        plays.push(this.makePlay(game, "run", y));
-      } else if (roll < 0.75) {
-        const y = this.rand(1, Math.min(15, left));
-        left -= y;
-        plays.push(this.makePlay(game, "pass", y));
+  /** Random non-scoring snap for building a series. */
+  randomSnap(game, preferShort) {
+    const r = Math.random();
+    if (r < 0.12) return this.makePlay(game, "sack", -this.rand(1, 5));
+    if (r < 0.30) return this.makePlay(game, "pass", 0);
+    if (r < 0.55) return this.makePlay(game, "run", preferShort ? this.rand(0, 4) : this.rand(0, 8));
+    if (r < 0.80) return this.makePlay(game, "pass", preferShort ? this.rand(1, 6) : this.rand(1, 12));
+    return this.makePlay(game, "screen", this.rand(1, 8));
+  },
+
+  /**
+   * Build plays until 4th down (optionally allowing first downs).
+   * Returns { plays, yardLine, down, distance } virtual state at 4th down.
+   */
+  buildUntilFourth(game, opts) {
+    const plays = [];
+    let yl = game.yardLine;
+    let down = game.down || 1;
+    let distance = game.distance || 10;
+    const allowFD = opts && opts.allowFirstDowns;
+    const maxSnaps = (opts && opts.maxSnaps) || 12;
+    const stall = opts && opts.stall; // keep gains short of sticks when possible
+
+    let snaps = 0;
+    while (down < 4 && snaps < maxSnaps) {
+      snaps++;
+      let play;
+      if (stall) {
+        // Prefer incomplete / short of distance
+        const r = Math.random();
+        if (r < 0.35) play = this.makePlay(game, "pass", 0);
+        else if (r < 0.5) play = this.makePlay(game, "sack", -this.rand(1, 4));
+        else if (r < 0.75) play = this.makePlay(game, "run", this.rand(0, Math.max(0, distance - 1)));
+        else play = this.makePlay(game, "pass", this.rand(0, Math.max(0, distance - 1)));
       } else {
-        const y = this.rand(1, Math.min(10, left));
-        left -= y;
-        plays.push(this.makePlay(game, "screen", y));
+        play = this.randomSnap(game, !allowFD);
+        // If first downs not allowed, cap yards short of distance
+        if (!allowFD && play.yards >= distance) {
+          play = this.makePlay(game, play.playType && play.playType.startsWith("pass") ? "pass" : "run",
+            Math.max(0, distance - 1));
+        }
+      }
+
+      plays.push(play);
+      yl = Math.max(0, Math.min(99, yl + play.yards));
+
+      if (play.yards >= distance) {
+        if (!allowFD) {
+          // shouldn't happen often
+          down = 4;
+          distance = 1;
+        } else {
+          down = 1;
+          distance = yl >= 90 ? Math.max(1, 100 - yl) : 10;
+        }
+      } else {
+        down += 1;
+        distance = Math.max(1, distance - play.yards);
       }
     }
-    return left;
+
+    // Force 4th if loop ended early
+    if (down < 4) {
+      down = 4;
+    }
+
+    return { plays, yardLine: yl, down, distance };
+  },
+
+  makeFieldGoal(game, good) {
+    const play = {
+      yards: 0,
+      time: this.clockFor("field_goal"),
+      playType: "field_goal",
+      special: good ? "fg" : "miss_fg",
+      text: "",
+      onFourth: true
+    };
+    this.withPersonnel(game, play, {
+      k: () => (good ? { fgMade: 1 } : { fgMiss: 1 })
+    });
+    const k = play.actors.k;
+    play.text = good
+      ? `4th down — ${k ? k.name : "K"} field goal is GOOD`
+      : `4th down — ${k ? k.name : "K"} field goal is NO good`;
+    if (this.timeRunningOut(game) && game.down !== 4) {
+      play.text = good
+        ? `Clock winding down — ${k ? k.name : "K"} field goal is GOOD`
+        : `Clock winding down — ${k ? k.name : "K"} field goal is NO good`;
+      play.onFourth = false;
+    }
+    return play;
+  },
+
+  makePunt(game) {
+    const puntY = this.rand(35, 52);
+    const play = {
+      yards: puntY,
+      time: this.clockFor("punt"),
+      playType: "punt",
+      special: "punt",
+      text: "",
+      onFourth: true
+    };
+    this.withPersonnel(game, play, {
+      p: () => ({ punts: 1, puntYds: puntY })
+    });
+    play.text = `4th down — ${play.actors.p ? play.actors.p.name : "P"} punts ${puntY} yards`;
+    return play;
   },
 
   generatePlays(game, outcome) {
     const plays = [];
     const start = game.yardLine;
     const needForTd = Math.max(1, 100 - start);
+    const late = this.timeRunningOut(game);
 
     switch (outcome.id) {
       case "touchdown": {
-        const left = this.pushSeries(game, plays, needForTd, this.rand(4, 9));
-        const finalGain = Math.max(1, left);
-        const isPass = Math.random() < 0.55;
-        const play = {
-          yards: finalGain,
-          time: this.clockFor(isPass ? "touchdown_pass" : "touchdown_run"),
-          playType: isPass ? "touchdown_pass" : "touchdown_run",
-          special: "td",
-          text: ""
-        };
-        if (isPass) {
-          this.withPersonnel(game, play, {
-            qb: () => ({ passYds: finalGain, passTd: 1 }),
-            wr: () => ({ recYds: finalGain, recTd: 1, receptions: 1 })
-          });
-          play.text = `TOUCHDOWN! ${play.actors.qb ? play.actors.qb.name : "QB"} to ${play.actors.wr ? play.actors.wr.name : "WR"} for ${finalGain}`;
-        } else {
-          this.withPersonnel(game, play, {
-            rb: () => ({ rushYds: finalGain, rushTd: 1 })
-          });
-          play.text = `TOUCHDOWN! ${play.actors.rb ? play.actors.rb.name : "RB"} runs it in from ${finalGain}`;
+        // March with real-ish downs until score
+        let yl = start;
+        let down = 1;
+        let distance = 10;
+        let guard = 0;
+        while (yl < 100 && guard < 20) {
+          guard++;
+          const need = 100 - yl;
+          if (need <= 12 && Math.random() < 0.55) {
+            // scoring play
+            const finalGain = need;
+            const isPass = Math.random() < 0.55;
+            const play = {
+              yards: finalGain,
+              time: this.clockFor(isPass ? "touchdown_pass" : "touchdown_run"),
+              playType: isPass ? "touchdown_pass" : "touchdown_run",
+              special: "td",
+              text: ""
+            };
+            if (isPass) {
+              this.withPersonnel(game, play, {
+                qb: () => ({ passYds: finalGain, passTd: 1 }),
+                wr: () => ({ recYds: finalGain, recTd: 1, receptions: 1 })
+              });
+              play.text = `TOUCHDOWN! ${play.actors.qb ? play.actors.qb.name : "QB"} to ${play.actors.wr ? play.actors.wr.name : "WR"} for ${finalGain}`;
+            } else {
+              this.withPersonnel(game, play, {
+                rb: () => ({ rushYds: finalGain, rushTd: 1 })
+              });
+              play.text = `TOUCHDOWN! ${play.actors.rb ? play.actors.rb.name : "RB"} runs it in from ${finalGain}`;
+            }
+            plays.push(play);
+            break;
+          }
+          const play = this.randomSnap(game, false);
+          // avoid accidental huge plays past end zone
+          if (yl + play.yards >= 100) {
+            play.yards = 100 - yl;
+            play.special = "td";
+            play.text = (play.text || "Gain") + " — TOUCHDOWN";
+            plays.push(play);
+            break;
+          }
+          plays.push(play);
+          yl += play.yards;
+          if (play.yards >= distance) {
+            down = 1;
+            distance = yl >= 90 ? Math.max(1, 100 - yl) : 10;
+          } else {
+            down += 1;
+            distance = Math.max(1, distance - play.yards);
+            if (down > 4) {
+              // stalled — convert outcome to punt/fg path
+              return this.generatePlays(game, {
+                id: this.inFgRange(yl) ? (Math.random() < 0.75 ? "field_goal" : "missed_fg") : "punt"
+              });
+            }
+          }
         }
-        plays.push(play);
         break;
       }
+
       case "field_goal":
       case "missed_fg": {
-        // If somehow outside range, march closer first
-        const target = Math.min(99, Math.max(start, start < 60 ? 65 : start));
-        this.pushSeries(game, plays, Math.max(0, target - start), this.rand(2, 6));
         const good = outcome.id === "field_goal";
-        const play = {
-          yards: 0,
-          time: this.clockFor("field_goal"),
-          playType: "field_goal",
-          special: good ? "fg" : "miss_fg",
-          text: ""
-        };
-        this.withPersonnel(game, play, {
-          k: () => good ? { fgMade: 1 } : { fgMiss: 1 }
+        // Late clock + already in range → kick now (any down)
+        if (late && this.inFgRange(start)) {
+          plays.push(this.makeFieldGoal(game, good));
+          break;
+        }
+        // Otherwise: build to 4th down, get into range if needed, then kick on 4th
+        const series = this.buildUntilFourth(game, {
+          allowFirstDowns: !this.inFgRange(start),
+          stall: this.inFgRange(start),
+          maxSnaps: 10
         });
-        const k = play.actors.k;
-        play.text = good
-          ? `${k ? k.name : "K"} — field goal is GOOD`
-          : `${k ? k.name : "K"} — field goal is NO good`;
-        plays.push(play);
+        plays.push(...series.plays);
+        let yl = series.yardLine;
+
+        // If still out of range after series, one more short push then 4th
+        if (!this.inFgRange(yl)) {
+          // try a couple more snaps allowing first downs toward 60
+          let down = 1;
+          let distance = 10;
+          let guard = 0;
+          while (!this.inFgRange(yl) && guard < 6) {
+            guard++;
+            const need = 60 - yl;
+            const play = this.makePlay(game, Math.random() < 0.5 ? "run" : "pass", this.rand(1, Math.min(12, Math.max(1, need + 5))));
+            plays.push(play);
+            yl = Math.min(99, yl + play.yards);
+            if (play.yards >= distance) {
+              down = 1;
+              distance = 10;
+            } else {
+              down++;
+              distance = Math.max(1, distance - play.yards);
+              if (down >= 4) break;
+            }
+          }
+          // ensure we're treating kick as 4th
+          if (down < 4 && !this.inFgRange(yl)) {
+            // can't reasonably FG — punt instead on 4th
+            while (down < 4) {
+              plays.push(this.makePlay(game, "pass", 0));
+              down++;
+            }
+            plays.push(this.makePunt(game));
+            break;
+          }
+        }
+
+        const fg = this.makeFieldGoal(game, good);
+        fg.text = fg.text.replace(/^Clock winding down — /, "4th down — ");
+        if (!fg.text.startsWith("4th")) fg.text = "4th down — " + fg.text;
+        plays.push(fg);
         break;
       }
+
       case "punt":
       case "big_stop_punt": {
-        // If in FG range, never punt — convert to FG path
-        if (game.yardLine >= 60) {
-          return this.generatePlays(game, { id: Math.random() < 0.8 ? "field_goal" : "missed_fg" });
-        }
-        const stops = outcome.id === "big_stop_punt" ? 3 : this.rand(3, 6);
-        for (let i = 0; i < stops - 1; i++) {
-          const r = Math.random();
-          if (r < 0.25) plays.push(this.makePlay(game, "pass", 0));
-          else if (r < 0.4) plays.push(this.makePlay(game, "sack", -this.rand(1, 5)));
-          else if (r < 0.7) plays.push(this.makePlay(game, "run", this.rand(0, 6)));
-          else plays.push(this.makePlay(game, "pass", this.rand(1, 8)));
-        }
-        const puntY = this.rand(35, 52);
-        const play = {
-          yards: puntY,
-          time: this.clockFor("punt"),
-          playType: "punt",
-          special: "punt",
-          text: ""
-        };
-        this.withPersonnel(game, play, {
-          p: () => ({ punts: 1, puntYds: puntY })
+        // Always reach 4th down first
+        const series = this.buildUntilFourth(game, {
+          allowFirstDowns: outcome.id === "punt" && Math.random() < 0.35,
+          stall: true,
+          maxSnaps: outcome.id === "big_stop_punt" ? 3 : 8
         });
-        play.text = `${play.actors.p ? play.actors.p.name : "P"} punts ${puntY} yards`;
-        plays.push(play);
+        plays.push(...series.plays);
+        const yl = series.yardLine;
+
+        // On 4th: FG if in range, else punt
+        if (this.inFgRange(yl)) {
+          plays.push(this.makeFieldGoal(game, Math.random() < 0.8));
+        } else {
+          plays.push(this.makePunt(game));
+        }
         break;
       }
+
       case "turnover_int": {
-        // Sometimes immediate (30%), usually a short series first
         if (Math.random() > 0.3) {
           const n = this.rand(1, 4);
           for (let i = 0; i < n; i++) {
@@ -373,11 +493,7 @@ window.DriveEngine = {
           }
         }
         const play = {
-          yards: 0,
-          time: this.clockFor("interception"),
-          playType: "interception",
-          special: "int",
-          text: ""
+          yards: 0, time: this.clockFor("interception"), playType: "interception", special: "int", text: ""
         };
         this.withPersonnel(game, play, {
           qb: () => ({ interceptions: 1 }),
@@ -387,6 +503,7 @@ window.DriveEngine = {
         plays.push(play);
         break;
       }
+
       case "turnover_fumble": {
         if (Math.random() > 0.25) {
           const n = this.rand(1, 4);
@@ -398,37 +515,26 @@ window.DriveEngine = {
           }
         }
         const play = {
-          yards: 0,
-          time: this.clockFor("fumble"),
-          playType: "fumble",
-          special: "fumble",
-          text: ""
+          yards: 0, time: this.clockFor("fumble"), playType: "fumble", special: "fumble", text: ""
         };
-        this.withPersonnel(game, play, {
-          def: () => ({ tackles: 1 })
-        });
+        this.withPersonnel(game, play, { def: () => ({ tackles: 1 }) });
         play.text = `FUMBLE recovered by ${play.actors.def ? play.actors.def.name : "the defense"}`;
         plays.push(play);
         break;
       }
+
       case "turnover_downs": {
-        for (let i = 0; i < 4; i++) {
-          const last = i === 3;
-          if (last) {
-            const y = this.rand(0, 3);
-            const p = this.makePlay(game, Math.random() < 0.5 ? "run" : "pass", y);
-            p.special = "downs";
-            p.text += " — fourth down short. Turnover on downs";
-            plays.push(p);
-          } else {
-            const r = Math.random();
-            if (r < 0.3) plays.push(this.makePlay(game, "pass", 0));
-            else if (r < 0.55) plays.push(this.makePlay(game, "run", this.rand(-1, 5)));
-            else plays.push(this.makePlay(game, "pass", this.rand(1, 6)));
-          }
-        }
+        // Explicitly 1st–3rd then failed 4th
+        const series = this.buildUntilFourth(game, { allowFirstDowns: false, stall: true, maxSnaps: 4 });
+        plays.push(...series.plays);
+        const y = this.rand(0, Math.max(0, series.distance - 1));
+        const p = this.makePlay(game, Math.random() < 0.5 ? "run" : "pass", y);
+        p.special = "downs";
+        p.text += " — 4th down, short of the marker. Turnover on downs";
+        plays.push(p);
         break;
       }
+
       case "safety": {
         const play = {
           yards: -Math.min(start, this.rand(2, 8)),
@@ -437,26 +543,20 @@ window.DriveEngine = {
           special: "safety",
           text: ""
         };
-        this.withPersonnel(game, play, {
-          sacker: () => ({ tackles: 1, sacks: 0.5 })
-        });
+        this.withPersonnel(game, play, { sacker: () => ({ tackles: 1 }) });
         play.text = `SAFETY — ${play.actors.sacker ? play.actors.sacker.name : "defense"} tackles in the end zone`;
         plays.push(play);
         break;
       }
+
       default: {
-        plays.push(this.makePlay(game, "pass", 0));
-        plays.push(this.makePlay(game, "run", this.rand(0, 3)));
-        plays.push(this.makePlay(game, "pass", 0));
-        const puntY = this.rand(38, 50);
-        const play = {
-          yards: puntY, time: this.clockFor("punt"), playType: "punt", special: "punt", text: ""
-        };
-        this.withPersonnel(game, play, { p: () => ({ punts: 1, puntYds: puntY }) });
-        play.text = `${play.actors.p ? play.actors.p.name : "P"} punts ${puntY} yards`;
-        plays.push(play);
+        const series = this.buildUntilFourth(game, { allowFirstDowns: false, stall: true, maxSnaps: 4 });
+        plays.push(...series.plays);
+        if (this.inFgRange(series.yardLine)) plays.push(this.makeFieldGoal(game, true));
+        else plays.push(this.makePunt(game));
       }
     }
+
     return plays;
   },
 
