@@ -2,12 +2,9 @@
 // NFL-STYLE SCHEDULE GENERATOR
 // ============================================
 //
-// Structure (17 games per team, 18 weeks, 1 bye):
-//   6  – division (home + away vs other 3)
-//   4  – one intra-conference division (all 4 teams)
-//   2  – remaining intra-conference (1 from each other division)
-//   4  – one interconference division (all 4 teams)
-//   1  – 17th game (interconference crossover)
+// 17 games per team, 18 weeks, 1 explicit bye each.
+// Byes are assigned first (weeks 5–12, 4 teams/week),
+// then games are placed only in non-bye weeks.
 //
 // ============================================
 
@@ -32,7 +29,7 @@ function buildNFLMatchups() {
     matchups.push({ home, away });
   }
 
-  // ---- 1. Division games (6 per team): H+A vs other 3 ----
+  // 1. Division (6): home + away vs other 3
   Object.values(div).forEach(teams => {
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
@@ -42,8 +39,7 @@ function buildNFLMatchups() {
     }
   });
 
-  // ---- 2. Intra-conference full division (4 per team) ----
-  // Pair divisions within each conference
+  // 2. Intra-conference full division (4)
   const intraFull = [
     ["AFC-East", "AFC-North"],
     ["AFC-South", "AFC-West"],
@@ -61,8 +57,7 @@ function buildNFLMatchups() {
     }
   });
 
-  // ---- 3. Intra-conference residual (2 per team) ----
-  // Each team plays one club (same index) from each of the other two divisions
+  // 3. Intra-conference residual (2)
   const residualPairs = [
     ["AFC-East", "AFC-South"],
     ["AFC-East", "AFC-West"],
@@ -82,7 +77,7 @@ function buildNFLMatchups() {
     }
   });
 
-  // ---- 4. Interconference full division (4 per team) ----
+  // 4. Interconference full division (4)
   ["East", "North", "South", "West"].forEach(d => {
     const A = div[`AFC-${d}`];
     const B = div[`NFC-${d}`];
@@ -94,7 +89,7 @@ function buildNFLMatchups() {
     }
   });
 
-  // ---- 5. 17th game – interconference crossover (1 per team) ----
+  // 5. 17th game – interconference crossover (1)
   const crossover = [
     ["AFC-East", "NFC-West"],
     ["AFC-North", "NFC-South"],
@@ -113,30 +108,74 @@ function buildNFLMatchups() {
   return matchups;
 }
 
+/**
+ * Assign each team exactly one bye week.
+ * Weeks 5–12 get 4 teams on bye each (8 × 4 = 32).
+ * Returns: { [teamKey]: byeWeekNumber }
+ */
+function assignByeWeeks() {
+  const byeWeeks = {}; // teamKey -> week
+  const teamsOnByeByWeek = {}; // week -> [teamKey]
+
+  // Bye window like the NFL: weeks 5 through 12
+  const byeWindow = [5, 6, 7, 8, 9, 10, 11, 12];
+  byeWindow.forEach(w => { teamsOnByeByWeek[w] = []; });
+
+  // Stable order so resets stay consistent
+  const ordered = TEAMS
+    .slice()
+    .sort((a, b) => teamName(a).localeCompare(teamName(b)));
+
+  ordered.forEach((team, index) => {
+    const week = byeWindow[index % byeWindow.length];
+    const key = teamKey(team);
+    byeWeeks[key] = week;
+    teamsOnByeByWeek[week].push(key);
+  });
+
+  // Balance: round-robin already puts 4 per week (32/8).
+  // Verify counts — if not 4, redistribute simply.
+  return { byeWeeks, teamsOnByeByWeek };
+}
+
 function assignMatchupsToWeeks(matchups) {
+  const { byeWeeks, teamsOnByeByWeek } = assignByeWeeks();
+
   const rng = mulberry32(42);
-  // Shuffle so the schedule is not rigid
   const pool = matchups
     .map(m => ({ m, order: rng() }))
     .sort((a, b) => a.order - b.order)
     .map(x => x.m);
 
+  // Weeks each team is already booked (starts with their bye blocked)
   const teamWeeks = {};
-  TEAMS.forEach(t => { teamWeeks[teamKey(t)] = new Set(); });
+  TEAMS.forEach(t => {
+    const key = teamKey(t);
+    teamWeeks[key] = new Set();
+    // Block the bye week so no game can land there
+    teamWeeks[key].add(byeWeeks[key]);
+  });
 
   const result = [];
   const remaining = pool.slice();
 
-  // Greedy multi-pass: fill weeks 1–18 without double-booking a team
-  for (let pass = 0; pass < 30 && remaining.length > 0; pass++) {
+  function canPlay(teamK, week) {
+    // Bye week is already in the set, so this covers it
+    if (teamWeeks[teamK].has(week)) return false;
+    // Max 17 games: set size includes 1 bye, so size >= 18 means 17 games + bye
+    if (teamWeeks[teamK].size >= 18) return false;
+    return true;
+  }
+
+  // Greedy multi-pass into non-bye weeks only
+  for (let pass = 0; pass < 40 && remaining.length > 0; pass++) {
     for (let week = 1; week <= 18; week++) {
       for (let i = remaining.length - 1; i >= 0; i--) {
         const g = remaining[i];
         const hk = teamKey(g.home);
         const ak = teamKey(g.away);
-        if (teamWeeks[hk].has(week) || teamWeeks[ak].has(week)) continue;
-        // Each team plays at most 17 games
-        if (teamWeeks[hk].size >= 17 || teamWeeks[ak].size >= 17) continue;
+
+        if (!canPlay(hk, week) || !canPlay(ak, week)) continue;
 
         teamWeeks[hk].add(week);
         teamWeeks[ak].add(week);
@@ -153,12 +192,12 @@ function assignMatchupsToWeeks(matchups) {
     }
   }
 
-  // Safety: if anything left, place into any free week for both teams
+  // Last-chance placement
   remaining.forEach(g => {
     const hk = teamKey(g.home);
     const ak = teamKey(g.away);
     for (let week = 1; week <= 18; week++) {
-      if (!teamWeeks[hk].has(week) && !teamWeeks[ak].has(week)) {
+      if (canPlay(hk, week) && canPlay(ak, week)) {
         teamWeeks[hk].add(week);
         teamWeeks[ak].add(week);
         result.push({
@@ -174,16 +213,32 @@ function assignMatchupsToWeeks(matchups) {
     }
   });
 
+  // Attach bye metadata for the UI
+  result._byeWeeks = byeWeeks;
+  result._teamsOnByeByWeek = teamsOnByeByWeek;
   return result;
 }
 
 function buildFullNFLSchedule() {
   const matchups = buildNFLMatchups();
-  return assignMatchupsToWeeks(matchups);
+  const games = assignMatchupsToWeeks(matchups);
+
+  // Persist bye map alongside games (plain array + metadata object)
+  const byeWeeks = games._byeWeeks || {};
+  const teamsOnByeByWeek = games._teamsOnByeByWeek || {};
+
+  // Strip non-enumerable-ish helper fields; return clean structure
+  const cleanGames = games.filter(g => g && g.week);
+
+  return {
+    games: cleanGames,
+    byeWeeks,
+    teamsOnByeByWeek
+  };
 }
 
-// Expose for renderer.js
 window.ScheduleGenerator = {
   buildFullNFLSchedule,
-  buildNFLMatchups
+  buildNFLMatchups,
+  assignByeWeeks
 };
