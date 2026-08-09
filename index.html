@@ -25,7 +25,6 @@
   </div>
 
   <div class="layout" id="app-layout">
-    <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo-slot logo-slot-md sidebar-logo" data-logo="app">
@@ -47,7 +46,6 @@
     </aside>
 
     <main class="main">
-      <!-- Play Game (weekly matchups) -->
       <div id="setup-screen" class="screen">
         <div class="week-header">
           <h2>Week <span id="current-week-label">1</span></h2>
@@ -56,12 +54,9 @@
             <button id="next-week-btn" class="btn small">Next →</button>
           </div>
         </div>
-        <div id="weekly-games" class="weekly-games">
-          <!-- Games inserted by JS (with team logos) -->
-        </div>
+        <div id="weekly-games" class="weekly-games"></div>
       </div>
 
-      <!-- Live Game -->
       <div id="game-screen" class="screen hidden">
         <div class="scoreboard">
           <div class="team-score away">
@@ -90,7 +85,6 @@
           </div>
         </div>
 
-        <!-- Field art: put image in assets/field/field.png -->
         <div id="game-field" class="game-field" aria-label="Football field">
           <div class="field-overlay">
             <span class="field-end-label" id="field-away-label">AWAY</span>
@@ -127,7 +121,6 @@
         </div>
       </div>
 
-      <!-- Standings -->
       <div id="standings-screen" class="screen hidden">
         <div class="standings-header">
           <div>
@@ -143,7 +136,6 @@
         <div id="standings-container" class="standings-container"></div>
       </div>
 
-      <!-- Schedule -->
       <div id="schedule-screen" class="screen hidden">
         <div class="standings-header">
           <h2>League Schedule</h2>
@@ -152,7 +144,6 @@
         <div id="schedule-container" class="schedule-container"></div>
       </div>
 
-      <!-- Awards -->
       <div id="awards-screen" class="screen hidden">
         <div class="standings-header">
           <h2>League Awards</h2>
@@ -161,7 +152,6 @@
         <div id="awards-list" class="awards-list"></div>
       </div>
 
-      <!-- Team Page -->
       <div id="team-page-screen" class="screen hidden">
         <button id="back-to-standings" class="btn small back-btn">← Back to Standings</button>
         <div class="team-page-header">
@@ -205,6 +195,7 @@
   </div>
 
   <script src="diceEngine.js"></script>
+  <script src="logos.js"></script>
   <script src="renderer.js"></script>
   <script src="scheduleGenerator.js"></script>
 </body>
