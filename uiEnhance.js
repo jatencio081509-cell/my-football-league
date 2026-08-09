@@ -30,6 +30,25 @@
     return bits.join(" · ");
   }
 
+  function ensureInjurySection() {
+    let box = document.getElementById("team-page-injuries");
+    if (box) return box;
+    const rosterSection = document.querySelector("#team-page-screen .team-page-section:last-child");
+    const parent = document.getElementById("team-page-screen");
+    if (!parent) return null;
+    const section = document.createElement("div");
+    section.className = "team-page-section";
+    section.innerHTML = `<h3>Injuries</h3><div id="team-page-injuries" class="injury-box"></div>`;
+    // Insert before roster section if possible
+    const rosterH = Array.from(parent.querySelectorAll(".team-page-section h3")).find(h => h.textContent === "Roster");
+    if (rosterH && rosterH.parentNode) {
+      parent.insertBefore(section, rosterH.parentNode);
+    } else {
+      parent.appendChild(section);
+    }
+    return document.getElementById("team-page-injuries");
+  }
+
   const _openTeamPage = window.openTeamPage;
   window.openTeamPage = function (teamIndex) {
     if (typeof _openTeamPage === "function") _openTeamPage(teamIndex);
@@ -37,6 +56,27 @@
     if (!team) return;
     const key = teamKey(team);
     const players = (ROSTERS[key] || []).slice();
+
+    // Injuries panel
+    const injBox = ensureInjurySection();
+    if (injBox && PS()) {
+      const injured = players
+        .map(p => ({ p, inj: PS().getInjury(team, p) }))
+        .filter(x => x.inj && x.inj.gamesLeft > 0);
+      if (!injured.length) {
+        injBox.innerHTML = `<p class="empty-note">No current injuries.</p>`;
+      } else {
+        injBox.innerHTML = injured.map(({ p, inj }) => {
+          const role = p.starter ? "Starter" : "Bench";
+          return `<div class="injury-card">
+            <div class="injury-name">${p.name} <span class="role-out">OUT</span></div>
+            <div class="injury-meta">${p.position} · ${role}</div>
+            <div class="injury-type"><strong>Injury:</strong> ${inj.type}</div>
+            <div class="injury-games"><strong>Out:</strong> ${inj.gamesLeft} more game${inj.gamesLeft === 1 ? "" : "s"}</div>
+          </div>`;
+        }).join("");
+      }
+    }
 
     const tbody = document.getElementById("team-page-roster");
     if (!tbody) return;
@@ -59,7 +99,7 @@
       const roleClass = p.starter ? "role-starter" : "role-bench";
       const inj = PS() ? PS().getInjury(team, p) : null;
       const outBadge = inj
-        ? ` <span class="role-out" title="${inj.type}">OUT · ${inj.type} (${inj.gamesLeft}g)</span>`
+        ? ` <span class="role-out" title="${inj.type}">OUT</span> <span class="injury-inline">${inj.type} · ${inj.gamesLeft}g</span>`
         : "";
       const stats = formatStats(p, team);
       const tr = document.createElement("tr");
@@ -155,7 +195,27 @@
         border-radius: 4px;
         vertical-align: middle;
       }
+      .injury-inline {
+        margin-left: 4px;
+        font-size: 0.75rem;
+        color: #fca5a5;
+        font-weight: 600;
+      }
       .injured-row { opacity: 0.72; }
+      .injury-box {
+        display: grid;
+        gap: 10px;
+      }
+      .injury-card {
+        background: #1a0f0f;
+        border: 1px solid #b91c1c;
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      .injury-name { font-weight: 700; margin-bottom: 4px; }
+      .injury-meta { color: #a8bdd0; font-size: 0.85rem; margin-bottom: 6px; }
+      .injury-type, .injury-games { font-size: 0.9rem; margin-top: 2px; }
+      .injury-type strong, .injury-games strong { color: #FDB813; }
       .player-stats-cell {
         color: #a8bdd0;
         font-size: 0.82rem;
