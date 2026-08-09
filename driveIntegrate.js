@@ -69,6 +69,15 @@
     setDriveControls("idle");
   }
 
+  function clearRemainingSteps() {
+    pendingSteps = [];
+    stepIndex = 0;
+    driveActive = false;
+    autoMode = false;
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+    setDriveControls("idle");
+  }
+
   function applySpecial(special) {
     if (!special) return;
     switch (special) {
@@ -128,7 +137,6 @@
     });
   }
 
-  /** Roll injury chance for players named on this play. */
   function checkInjuries(step) {
     if (!PS() || !game || !step) return;
     const candidates = [];
@@ -142,7 +150,6 @@
       Object.keys(step.actors).forEach(k => {
         const p = step.actors[k];
         if (!p) return;
-        // Guess team: offensive roles on possession team
         const offRoles = ["qb", "rb", "wr", "k", "p"];
         const team = offRoles.includes(k)
           ? (game.possession === "home" ? game.home : game.away)
@@ -151,7 +158,6 @@
       });
     }
 
-    // Dedupe by player name
     const seen = new Set();
     candidates.forEach(({ team, player }) => {
       const id = player.name + "@" + teamKey(team);
@@ -176,6 +182,11 @@
     if (!game || game.gameOver) return;
 
     applyStats(step);
+
+    // Punt / FG / turnover on downs are 4th-down plays
+    if (step.special === "punt" || step.special === "fg" || step.special === "miss_fg" || step.special === "downs") {
+      game.down = 4;
+    }
 
     if (step.special === "punt") {
       const afterKick = game.yardLine + step.yards;
@@ -204,13 +215,26 @@
           game.down = 1;
           game.distance = 10;
           if (game.yardLine >= 90) game.distance = Math.max(1, 100 - game.yardLine);
+        } else if (game.down >= 4) {
+          // Already 4th and short → turnover on downs (never 5th)
+          game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
+          game.playLog.push("4th down — short of the marker. Turnover on downs");
+          checkInjuries(step);
+          applySpecial("downs");
+          applyTime(step.time);
+          clearRemainingSteps();
+          updateUI();
+          return;
         } else {
           game.down += 1;
-          game.distance -= step.yards;
-          if (game.distance < 1) game.distance = 1;
+          game.distance = Math.max(1, game.distance - Math.max(0, step.yards));
+          if (game.down > 4) game.down = 4;
         }
       }
     }
+
+    if (game.down > 4) game.down = 4;
+    if (game.down < 1) game.down = 1;
 
     game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
     checkInjuries(step);
@@ -275,6 +299,12 @@
 
     markDriveStart();
 
+    // Fresh series always starts 1st & 10 unless mid-drive state exists
+    if (!game.down || game.down < 1 || game.down > 4) {
+      game.down = 1;
+      game.distance = 10;
+    }
+
     const outcome = DE().resolveDriveFromDice(roll, game);
     const title = DE().outcomeTitle(outcome.id);
     let header = "——— " + title + " ——-";
@@ -298,7 +328,6 @@
     setDriveControls("stepping");
   };
 
-  // When final result is recorded, age injuries one game
   const _recordGameResult = window.recordGameResult;
   if (typeof _recordGameResult === "function") {
     window.recordGameResult = function () {
@@ -308,10 +337,14 @@
     };
   }
 
-  // Also hook end-game button path via Mutation / polling game.gameOver
   const origUpdateUI = window.updateUI;
   if (typeof origUpdateUI === "function") {
     window.updateUI = function () {
+      // Clamp downs before paint
+      if (game) {
+        if (game.down > 4) game.down = 4;
+        if (game.down < 1) game.down = 1;
+      }
       origUpdateUI.apply(this, arguments);
       if (game && (game.gameOver || game.resultRecorded)) tickInjuriesIfNeeded();
     };
