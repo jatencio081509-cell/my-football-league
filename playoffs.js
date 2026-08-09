@@ -19,11 +19,10 @@ function compareTeams(a, b) {
 
 function isWeekComplete(week) {
   const games = (typeof schedule !== "undefined" ? schedule : []).filter(g => g.week === week);
-  if (games.length === 0) return week < 1; // no games = nothing to finish (bye-only still ok if empty)
+  if (games.length === 0) return true;
   return games.every(g => g.played);
 }
 
-/** Week N is playable only if week N-1 is fully finished (week 1 always open). */
 function canPlayWeek(week) {
   if (week <= 1) return true;
   return isWeekComplete(week - 1);
@@ -36,11 +35,6 @@ function regularSeasonComplete() {
   return true;
 }
 
-/**
- * NFL-style: 7 seeds per conference.
- * Seeds 1–4 = division winners (sorted by record).
- * Seeds 5–7 = wild cards (best remaining records).
- */
 function getConferenceSeeds(conference) {
   const rows = Object.values(standings).filter(r => r.team && r.team.conference === conference);
   const divisions = ["East", "North", "South", "West"];
@@ -78,7 +72,6 @@ function getConferenceSeeds(conference) {
     });
   });
 
-  // Fill empty seeds if season hasn't produced enough rows yet
   while (seeds.length < 7) {
     seeds.push({
       seed: seeds.length + 1,
@@ -97,7 +90,6 @@ function seedLabel(s) {
 }
 
 function buildBracketMatchups(seeds) {
-  // seeds array index 0 = seed 1, … index 6 = seed 7
   const bySeed = {};
   seeds.forEach(s => { bySeed[s.seed] = s; });
   return {
@@ -107,7 +99,6 @@ function buildBracketMatchups(seeds) {
       { label: "WC Game 3", home: bySeed[4], away: bySeed[5] }
     ],
     bye: bySeed[1],
-    // Later rounds stay TBD until previous games are played — for projected view show placeholders
     divisional: [
       { label: "Divisional 1", home: bySeed[1], away: null, note: "Winner of WC (lowest remaining seed)" },
       { label: "Divisional 2", home: null, away: null, note: "WC winners re-seeded" }
@@ -149,8 +140,8 @@ function renderPlayoffs() {
   }
 
   function matchupCard(m) {
-    const home = m.home && m.home.team ? seedLabel(m.home) : (m.note || "TBD");
-    const away = m.away && m.away.team ? seedLabel(m.away) : (m.away === null && m.note ? "TBD" : (m.away ? seedLabel(m.away) : "TBD"));
+    const home = m.home && m.home.team ? seedLabel(m.home) : "TBD";
+    const away = m.away && m.away.team ? seedLabel(m.away) : "TBD";
     return `
       <div class="bracket-game">
         <div class="bracket-game-label">${m.label}</div>
@@ -200,7 +191,7 @@ function renderPlayoffs() {
         <li><strong>Conference Championship</strong> — ${locked ? "After Divisional results" : "TBD until seeds are locked"}</li>
         <li><strong>League Championship</strong> — ${locked ? "AFC champ vs NFC champ" : "TBD until seeds are locked"}</li>
       </ul>
-      <p class="empty-note">Playoff games cannot be scheduled until every regular-season seed has secured its spot (end of Week 18).</p>
+      <p class="empty-note">Playoff games stay TBD until every regular-season seed has secured its spot (all Week 18 games final).</p>
     </div>
 
     <div class="playoff-grid">
@@ -217,7 +208,7 @@ function renderPlayoffs() {
       <h3>League Championship</h3>
       <div class="bracket-game bracket-tbd">
         <div class="bracket-game-label">Championship Game</div>
-        <div class="empty-note">${locked ? "AFC Champion vs NFC Champion" : "TBD — available after both conference champions are decided"}</div>
+        <div class="empty-note">${locked ? "AFC Champion vs NFC Champion" : "TBD — after both conference champions are decided"}</div>
       </div>
     </div>
   `;
