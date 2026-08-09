@@ -1,4 +1,4 @@
-// Team page depth chart + stats; awards projections
+// Team page depth chart + stats + injuries; awards projections
 (function () {
   function PS() { return window.PlayerSystem; }
 
@@ -38,12 +38,10 @@
     const key = teamKey(team);
     const players = (ROSTERS[key] || []).slice();
 
-    // Re-render roster with starter/bench + stats
     const tbody = document.getElementById("team-page-roster");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    // Sort: starters first by position group, then bench
     const order = ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "CB", "S", "K", "P"];
     players.sort((a, b) => {
       if (a.starter !== b.starter) return a.starter ? -1 : 1;
@@ -59,11 +57,16 @@
       else if (p.rating >= 70) ratingClass = "rating-mid";
       const role = p.starter ? "STARTER" : "Bench";
       const roleClass = p.starter ? "role-starter" : "role-bench";
+      const inj = PS() ? PS().getInjury(team, p) : null;
+      const outBadge = inj
+        ? ` <span class="role-out" title="${inj.type}">OUT · ${inj.type} (${inj.gamesLeft}g)</span>`
+        : "";
       const stats = formatStats(p, team);
       const tr = document.createElement("tr");
+      if (inj) tr.classList.add("injured-row");
       tr.innerHTML =
         `<td class="rank">${i + 1}</td>` +
-        `<td class="team-cell">${p.name} <span class="${roleClass}">${role}</span></td>` +
+        `<td class="team-cell">${p.name} <span class="${roleClass}">${role}</span>${outBadge}</td>` +
         `<td>${p.position}</td>` +
         `<td>${p.age}</td>` +
         `<td>${p.height}</td>` +
@@ -87,7 +90,6 @@
     const container = document.getElementById("awards-list");
     if (!container) return;
 
-    // Remove old projection block
     const old = document.getElementById("award-projections");
     if (old) old.remove();
 
@@ -113,7 +115,6 @@
     container.parentNode.insertBefore(block, container);
   };
 
-  // Inject styles
   window.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("ui-enhance-style")) return;
     const s = document.createElement("style");
@@ -142,6 +143,19 @@
         border-radius: 4px;
         vertical-align: middle;
       }
+      .role-out {
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 0.65rem;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+        color: #fff;
+        background: #b91c1c;
+        padding: 1px 6px;
+        border-radius: 4px;
+        vertical-align: middle;
+      }
+      .injured-row { opacity: 0.72; }
       .player-stats-cell {
         color: #a8bdd0;
         font-size: 0.82rem;
