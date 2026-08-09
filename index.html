@@ -29,6 +29,10 @@
 <div id="setup-screen" class="screen">
     <div class="week-header">
         <h2>Week <span id="current-week-label">1</span></h2>
+        <div class="week-nav">
+          <button id="prev-week-btn" class="btn small">← Prev</button>
+          <button id="next-week-btn" class="btn small">Next →</button>
+        </div>
     </div>
     <div id="weekly-games" class="weekly-games">
         <!-- Games are inserted here by JavaScript -->
@@ -182,5 +186,6 @@
   </div>
   <script src="diceEngine.js"></script>
   <script src="renderer.js"></script>
+  <script src="scheduleGenerator.js"></script>
 </body>
 </html>
