@@ -96,8 +96,8 @@
         <div class="possession" id="possession-text">Possession: Home Team</div>
 
         <div class="play-entry">
-          <h3>Roll for Play</h3>
-          <p class="dice-instructions">Roll all seven dice and enter the numbers in order.</p>
+          <h3>Roll for Drive</h3>
+          <p class="dice-instructions">Roll all seven dice once per drive. That result decides how the drive ends; plays are generated automatically and still run the clock.</p>
           <div class="dice-inputs">
             <div class="dice-input"><label>1–4</label><input type="number" id="die-1" min="1" max="4" placeholder="—"></div>
             <div class="dice-input"><label>0–9</label><input type="number" id="die-2" min="0" max="9" placeholder="—"></div>
@@ -106,10 +106,10 @@
             <div class="dice-input"><label>1–20</label><input type="number" id="die-5" min="1" max="20" placeholder="—"></div>
             <div class="dice-input"><label>1–10</label><input type="number" id="die-6" min="1" max="10" placeholder="—"></div>
             <div class="dice-input"><label>1–6</label><input type="number" id="die-7" min="1" max="6" placeholder="—"></div>
-            <button id="roll-play-btn" class="btn primary">Determine Play</button>
+            <button id="roll-play-btn" class="btn">Fill random (test)</button>
             <div id="dice-result" class="dice-result hidden"></div>
           </div>
-          <button id="submit-dice-roll" class="btn primary">Resolve Play</button>
+          <button id="submit-dice-roll" class="btn primary">Resolve Drive</button>
         </div>
 
         <div class="play-log">
@@ -206,6 +206,8 @@
   <script src="scheduleGenerator.js"></script>
   <script src="playoffs.js"></script>
   <script src="fieldVisual.js"></script>
+  <script src="driveEngine.js"></script>
   <script src="logoIntegrate.js"></script>
+  <script src="driveIntegrate.js"></script>
 </body>
 </html>
