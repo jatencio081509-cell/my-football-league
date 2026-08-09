@@ -1,23 +1,23 @@
-/* ========== LIVE GAME FIELD ========== */
+/* ========== ESPN-STYLE FIELD ========== */
 .game-field {
   width: 100%;
   max-width: 1400px;
-  margin: 0 auto 20px;
-  height: 240px;
-  border-radius: 12px;
-  border: 2px solid var(--gold, #FDB813);
-  background-color: var(--field-green, #1E7B44);
-  background-image: url("assets/field/field.png");
+  margin: 0 auto 12px;
+  height: 180px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: #1a7a3a;
+  background-image:
+    linear-gradient(180deg, rgba(0,0,0,0.15) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.2) 100%),
+    url("assets/field/field.png");
   background-size: cover;
   background-position: center;
   position: relative;
   overflow: hidden;
-  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.25);
 }
 
 .game-field.red-zone {
-  box-shadow: inset 0 0 50px rgba(192, 57, 43, 0.35),
-              0 0 12px rgba(192, 57, 43, 0.25);
+  box-shadow: inset 0 0 36px rgba(160, 30, 30, 0.35);
 }
 
 .field-playable {
@@ -28,133 +28,135 @@
 }
 
 .field-endzone {
-  width: 10%;
-  background: rgba(18, 36, 56, 0.35);
-  border-right: 2px solid rgba(255, 255, 255, 0.5);
+  width: 8%;
+  position: relative;
+  background: rgba(12, 35, 70, 0.5);
+}
+.field-endzone-away {
+  border-right: 3px solid #ffffff;
 }
 .field-endzone-home {
-  border-right: none;
-  border-left: 2px solid rgba(255, 255, 255, 0.5);
+  border-left: 3px solid #ffffff;
 }
 
 .field-mid {
   flex: 1;
   position: relative;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(10% - 1px),
+      rgba(255, 255, 255, 0.28) calc(10% - 1px),
+      rgba(255, 255, 255, 0.28) 10%
+    );
 }
 
-.field-yard-lines {
+.field-mid::before {
+  content: "";
   position: absolute;
   inset: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent calc(5% - 0.5px),
+      rgba(255, 255, 255, 0.12) calc(5% - 0.5px),
+      rgba(255, 255, 255, 0.12) 5%
+    );
+  pointer-events: none;
 }
-.yard-tick {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: rgba(255, 255, 255, 0.55);
-  transform: translateX(-50%);
-}
+
+.field-yard-lines { display: none; }
 
 .field-yard-numbers {
   position: absolute;
-  top: 10px;
-  left: 0;
-  right: 0;
-  height: 20px;
+  inset: 0;
   pointer-events: none;
+  z-index: 2;
 }
+
 .yard-num {
   position: absolute;
+  top: 10%;
   transform: translateX(-50%);
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-weight: 800;
   font-size: 12px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: 0.4px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.yard-num.bottom {
+  top: auto;
+  bottom: 10%;
 }
 
 .field-hashes {
   position: absolute;
   left: 0;
   right: 0;
-  height: 2px;
-  background: repeating-linear-gradient(
-    to right,
-    rgba(255, 255, 255, 0.35) 0 4px,
-    transparent 4px 10px
-  );
+  height: 1px;
+  background: rgba(255, 255, 255, 0.18);
+  z-index: 1;
 }
-.field-hashes-top { top: 32%; }
-.field-hashes-bot { bottom: 32%; }
+.field-hashes-top { top: 40%; }
+.field-hashes-bot { bottom: 40%; }
 
-/* Ball */
-.ball-marker {
+/* ESPN blue line of scrimmage */
+.los-marker {
   position: absolute;
-  top: 50%;
-  width: 18px;
-  height: 18px;
-  margin-left: -9px;
-  margin-top: -9px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #ffe08a, #FDB813 45%, #a67c00);
-  border: 2px solid #122438;
-  box-shadow: 0 0 10px rgba(253, 184, 19, 0.8);
-  z-index: 5;
-  transition: left 0.45s ease;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  background: #00a3e0;
+  box-shadow: 0 0 8px rgba(0, 163, 224, 0.75);
+  z-index: 6;
+  transition: left 0.35s ease;
 }
-.ball-marker.drive-right::after,
-.ball-marker.drive-left::after {
+/* Tiny football pip at center of LOS (not a big ball) */
+.los-marker::before {
   content: "";
   position: absolute;
   top: 50%;
-  width: 0;
-  height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  transform: translateY(-50%);
-}
-.ball-marker.drive-right::after {
-  left: 100%;
-  border-left: 7px solid #FDB813;
-  margin-left: 2px;
-}
-.ball-marker.drive-left::after {
-  right: 100%;
-  border-right: 7px solid #FDB813;
-  margin-right: 2px;
+  left: 50%;
+  width: 12px;
+  height: 8px;
+  margin: -4px 0 0 -6px;
+  background: #c9a227;
+  border-radius: 50% / 42%;
+  border: 1px solid #4a3a10;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.45);
 }
 
-/* First down (yellow line) */
+/* ESPN yellow first-down line */
 .first-down-marker {
   position: absolute;
-  top: 8%;
-  bottom: 8%;
+  top: 0;
+  bottom: 0;
   width: 3px;
   margin-left: -1.5px;
-  background: #FDB813;
-  box-shadow: 0 0 8px rgba(253, 184, 19, 0.7);
-  z-index: 4;
-  transition: left 0.45s ease;
-  border-radius: 2px;
+  background: #f5c518;
+  box-shadow: 0 0 8px rgba(245, 197, 24, 0.7);
+  z-index: 5;
+  transition: left 0.35s ease;
 }
 
-/* Play movement trail */
-.play-trail {
+/* Soft band between LOS and first down (yards to go) */
+.drive-band {
   position: absolute;
-  top: 50%;
-  height: 4px;
-  margin-top: -2px;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 2px;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 163, 224, 0.12);
   z-index: 3;
-  opacity: 0;
+  transition: left 0.35s ease, width 0.35s ease;
   pointer-events: none;
 }
-.play-trail.flash {
-  animation: trail-fade 0.7s ease forwards;
-}
-@keyframes trail-fade {
-  0% { opacity: 0.95; }
-  100% { opacity: 0; }
+
+.ball-marker,
+.play-trail {
+  display: none !important;
 }
 
 .field-overlay {
@@ -163,19 +165,42 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 10px;
-  z-index: 6;
+  padding: 0 4px;
+  z-index: 8;
   pointer-events: none;
 }
 .field-end-label {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   font-weight: 900;
-  letter-spacing: 2px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 0.8rem;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.7rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
 }
 .field-end-home {
   transform: none;
 }
+
+.field-legend {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  margin: 0 auto 18px;
+  max-width: 1400px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #a8bdd0);
+}
+.field-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.field-legend i {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 1px;
+}
+.field-legend .lg-los { background: #00a3e0; }
+.field-legend .lg-fd { background: #f5c518; }
