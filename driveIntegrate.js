@@ -9,6 +9,7 @@
   let autoMode = false;
   let autoTimer = null;
   let driveActive = false;
+  let injuriesTickedForGame = false;
 
   const _createNewGame = window.createNewGame;
   window.createNewGame = function (home, away, scheduledGame) {
@@ -19,6 +20,7 @@
       g.driveStartYard = g.yardLine;
       g.driveStartAbs = null;
     }
+    injuriesTickedForGame = false;
     resetDriveUI();
     return g;
   };
@@ -30,7 +32,6 @@
   }
 
   function setDriveControls(state) {
-    // state: 'dice' | 'stepping' | 'idle'
     const diceBox = document.querySelector(".dice-inputs");
     const resolveBtn = document.getElementById("submit-dice-roll");
     const nextBtn = document.getElementById("next-play-btn");
@@ -48,7 +49,7 @@
     } else {
       if (diceBox) diceBox.style.opacity = "1";
       if (resolveBtn) resolveBtn.disabled = false;
-      if (nextBtn) { nextBtn.disabled = true; }
+      if (nextBtn) nextBtn.disabled = true;
       if (autoBtn) {
         autoBtn.disabled = true;
         autoBtn.textContent = "Auto Play";
@@ -127,6 +128,50 @@
     });
   }
 
+  /** Roll injury chance for players named on this play. */
+  function checkInjuries(step) {
+    if (!PS() || !game || !step) return;
+    const candidates = [];
+
+    if (step.statPatches) {
+      step.statPatches.forEach(sp => {
+        if (sp && sp.team && sp.player) candidates.push({ team: sp.team, player: sp.player });
+      });
+    }
+    if (step.actors) {
+      Object.keys(step.actors).forEach(k => {
+        const p = step.actors[k];
+        if (!p) return;
+        // Guess team: offensive roles on possession team
+        const offRoles = ["qb", "rb", "wr", "k", "p"];
+        const team = offRoles.includes(k)
+          ? (game.possession === "home" ? game.home : game.away)
+          : (game.possession === "home" ? game.away : game.home);
+        candidates.push({ team, player: p });
+      });
+    }
+
+    // Dedupe by player name
+    const seen = new Set();
+    candidates.forEach(({ team, player }) => {
+      const id = player.name + "@" + teamKey(team);
+      if (seen.has(id)) return;
+      seen.add(id);
+      const result = PS().maybeInjureFromPlay(team, player, step.playType || step.special);
+      if (result) {
+        game.playLog.push(result.text);
+      }
+    });
+  }
+
+  function tickInjuriesIfNeeded() {
+    if (!game || !PS() || injuriesTickedForGame) return;
+    if (!game.gameOver && !game.resultRecorded) return;
+    PS().tickInjuriesForTeam(game.home);
+    PS().tickInjuriesForTeam(game.away);
+    injuriesTickedForGame = true;
+  }
+
   function applyPlayStep(step) {
     if (!game || game.gameOver) return;
 
@@ -135,6 +180,7 @@
     if (step.special === "punt") {
       const afterKick = game.yardLine + step.yards;
       game.playLog.push(step.text);
+      checkInjuries(step);
       switchPossession();
       let spot = 100 - afterKick;
       if (spot < 1) spot = 20;
@@ -167,6 +213,7 @@
     }
 
     game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
+    checkInjuries(step);
 
     if (step.special === "td") game.yardLine = 100;
 
@@ -185,6 +232,7 @@
   function advanceOnePlay() {
     if (!driveActive || !game || game.gameOver) {
       finishDrive();
+      tickInjuriesIfNeeded();
       return;
     }
     if (stepIndex >= pendingSteps.length) {
@@ -195,6 +243,7 @@
     stepIndex += 1;
     if (stepIndex >= pendingSteps.length || game.gameOver) {
       finishDrive();
+      tickInjuriesIfNeeded();
       return;
     }
     setDriveControls("stepping");
@@ -249,11 +298,28 @@
     setDriveControls("stepping");
   };
 
+  // When final result is recorded, age injuries one game
+  const _recordGameResult = window.recordGameResult;
+  if (typeof _recordGameResult === "function") {
+    window.recordGameResult = function () {
+      const result = _recordGameResult.apply(this, arguments);
+      tickInjuriesIfNeeded();
+      return result;
+    };
+  }
+
+  // Also hook end-game button path via Mutation / polling game.gameOver
+  const origUpdateUI = window.updateUI;
+  if (typeof origUpdateUI === "function") {
+    window.updateUI = function () {
+      origUpdateUI.apply(this, arguments);
+      if (game && (game.gameOver || game.resultRecorded)) tickInjuriesIfNeeded();
+    };
+  }
+
   window.addEventListener("DOMContentLoaded", () => {
-    // Ensure depth charts
     if (PS()) PS().applyDepthCharts();
 
-    // Inject control row if missing
     const playEntry = document.querySelector(".play-entry");
     if (playEntry && !document.getElementById("next-play-btn")) {
       const row = document.createElement("div");
@@ -327,7 +393,6 @@
         "Roll once per drive. Then use Next Play to step through, or Auto Play to run them out. Clock still ticks per play type.";
     }
 
-    // Style for controls
     if (!document.getElementById("drive-ctrl-style")) {
       const s = document.createElement("style");
       s.id = "drive-ctrl-style";
