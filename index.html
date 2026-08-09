@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- ========== LOADING SCREEN (drop 10s animation in assets/logos/app/) ========== -->
   <div id="loading-screen" class="loading-screen">
     <div class="loading-inner">
       <video id="loading-video" class="loading-media" muted playsinline></video>
@@ -40,9 +39,7 @@
         <button class="sidebar-btn" data-screen="standings-screen">Standings</button>
         <button class="sidebar-btn" data-screen="awards-screen">Awards</button>
       </nav>
-      <div class="sidebar-footer">
-        <p>Dice League</p>
-      </div>
+      <div class="sidebar-footer"><p>Dice League</p></div>
     </aside>
 
     <main class="main">
@@ -61,9 +58,9 @@
         <div class="scoreboard">
           <div class="team-score away">
             <div class="team-label">AWAY</div>
-            <div class="logo-slot logo-slot-lg team-logo-slot" id="away-logo-slot">
+            <div class="logo-slot logo-slot-lg" id="away-logo-slot">
               <img class="logo-img" alt="Away logo">
-              <div class="logo-placeholder" id="away-logo-ph">AWY</div>
+              <div class="logo-placeholder">AWY</div>
             </div>
             <div class="team-name" id="away-name">Away</div>
             <div class="score" id="away-score">0</div>
@@ -76,16 +73,16 @@
           </div>
           <div class="team-score home">
             <div class="team-label">HOME</div>
-            <div class="logo-slot logo-slot-lg team-logo-slot" id="home-logo-slot">
+            <div class="logo-slot logo-slot-lg" id="home-logo-slot">
               <img class="logo-img" alt="Home logo">
-              <div class="logo-placeholder" id="home-logo-ph">HME</div>
+              <div class="logo-placeholder">HME</div>
             </div>
             <div class="team-name" id="home-name">Home</div>
             <div class="score" id="home-score">0</div>
           </div>
         </div>
 
-        <div id="game-field" class="game-field" aria-label="Football field">
+        <div id="game-field" class="game-field">
           <div class="field-overlay">
             <span class="field-end-label" id="field-away-label">AWAY</span>
             <span class="field-end-label field-end-home" id="field-home-label">HOME</span>
@@ -158,7 +155,7 @@
           <div class="team-page-identity">
             <div class="logo-slot logo-slot-xl" id="team-page-logo-slot">
               <img class="logo-img" alt="Team logo">
-              <div class="logo-placeholder" id="team-page-logo-ph">TM</div>
+              <div class="logo-placeholder">TM</div>
             </div>
             <div>
               <h2 id="team-page-name">Team Name</h2>
@@ -182,9 +179,7 @@
           <div class="table-wrapper">
             <table class="standings-table roster-table">
               <thead>
-                <tr>
-                  <th>#</th><th>Name</th><th>Pos</th><th>Age</th><th>Height</th><th>Weight</th><th>Rating</th>
-                </tr>
+                <tr><th>#</th><th>Name</th><th>Pos</th><th>Age</th><th>Height</th><th>Weight</th><th>Rating</th></tr>
               </thead>
               <tbody id="team-page-roster"></tbody>
             </table>
@@ -198,5 +193,6 @@
   <script src="logos.js"></script>
   <script src="renderer.js"></script>
   <script src="scheduleGenerator.js"></script>
+  <script src="logoIntegrate.js"></script>
 </body>
 </html>
