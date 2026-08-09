@@ -41,9 +41,6 @@ function teamName(team) {
 function teamKey(team) {
   return `${team.city}-${team.name}`;
 }
-// ============================================
-// SEEDED RANDOM + PLAYER GENERATION
-// ============================================
 function mulberry32(a) {
   return function() {
     let t = a += 0x6D2B79F5;
@@ -99,12 +96,8 @@ const ROSTERS = generateRosters();
 function getTeamOverall(team){
     const players = ROSTERS[teamKey(team)] || [];
     if(players.length === 0) return 0;
-    const total = players.reduce((sum, player)=>sum + player.rating, 0);
-    return Math.round(total / players.length);
+    return Math.round(players.reduce((sum, p) => sum + p.rating, 0) / players.length);
 }
-// ============================================
-// STANDINGS
-// ============================================
 function createEmptyStandings() {
   const s = {};
   TEAMS.forEach(team => { s[teamKey(team)] = { team, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 }; });
@@ -117,78 +110,34 @@ function loadStandings() {
 }
 function saveStandings(s) { localStorage.setItem("mfl-standings", JSON.stringify(s)); }
 let standings = loadStandings();
-// ============================================
-// SCHEDULE
-// ============================================
 let schedule = [];
 let currentWeek = 1;
-function saveSchedule() {
-    localStorage.setItem("mfl-schedule", JSON.stringify(schedule));
-}
+function saveSchedule() { localStorage.setItem("mfl-schedule", JSON.stringify(schedule)); }
 function loadSchedule() {
-    const saved = localStorage.getItem("mfl-schedule");
-    if(saved){
-        try { return JSON.parse(saved); } catch(e){ return []; }
-    }
-    return [];
+  const saved = localStorage.getItem("mfl-schedule");
+  if (saved) { try { return JSON.parse(saved); } catch (e) { return []; } }
+  return [];
 }
 schedule = loadSchedule();
-// ============================================
-// SCHEDULE GENERATOR
-// ============================================
-function addGame(week, home, away) {
-    schedule.push({
-        week,
-        home,
-        away,
-        played: false,
-        homeScore: null,
-        awayScore: null
-    });
-}
-function generateDivisionGames() {
-    const divisions = {};
-    TEAMS.forEach(team => {
-        const key = `${team.conference}-${team.division}`;
-        if(!divisions[key]){
-            divisions[key] = [];
-        }
-        divisions[key].push(team);
-    });
-    let week = 1;
-    Object.values(divisions).forEach(divTeams => {
-        if(divTeams.length !== 4) return;
-        for(let i = 0; i < divTeams.length; i++){
-            for(let j = i + 1; j < divTeams.length; j++){
-                addGame(week, divTeams[i], divTeams[j]);
-                week++;
-                if(week > 18){ week = 1; }
-                addGame(week, divTeams[j], divTeams[i]);
-                week++;
-                if(week > 18){ week = 1; }
-            }
-        }
-    });
-}
-// force=true clears and rebuilds even if a schedule already exists
+
+// NFL schedule via scheduleGenerator.js (loaded after this file)
 function generateSchedule(force = false) {
-    if (schedule.length > 0 && !force) {
-        return;
-    }
+  if (schedule.length > 0 && !force) return;
+  if (window.ScheduleGenerator && window.ScheduleGenerator.buildFullNFLSchedule) {
+    schedule = window.ScheduleGenerator.buildFullNFLSchedule();
+  } else {
     schedule = [];
-    generateDivisionGames();
-    saveSchedule();
+  }
+  saveSchedule();
 }
 function resetSchedule() {
-    if (!confirm("Reset the entire schedule? This clears all scheduled games and any saved results on the schedule.")) {
-        return;
-    }
-    schedule = [];
-    currentWeek = 1;
-    localStorage.setItem("mfl-current-week", "1");
-    generateSchedule(true);
-    renderSchedule();
-    renderWeeklyGames();
+  if (!confirm("Reset the entire schedule? This clears all scheduled games and results.")) return;
+  schedule = [];
+  currentWeek = 1;
+  localStorage.setItem("mfl-current-week", "1");
+  generateSchedule(true);
+  renderSchedule();
+  renderWeeklyGames();
 }
 function recordGameResult(homeTeam, awayTeam, homeScore, awayScore) {
   const homeKey = teamKey(homeTeam);
@@ -203,190 +152,132 @@ function recordGameResult(homeTeam, awayTeam, homeScore, awayScore) {
   saveStandings(standings);
 }
 function getSortedStandings() {
-    return Object.values(standings).sort((a, b) => {
-        const gamesA = a.wins + a.losses + a.ties;
-        const gamesB = b.wins + b.losses + b.ties;
-        if (gamesA === 0 && gamesB === 0) {
-            const overallA = getTeamOverall(a.team);
-            const overallB = getTeamOverall(b.team);
-            if (overallB !== overallA) return overallB - overallA;
-            return teamName(a.team).localeCompare(teamName(b.team));
-        }
-        if (gamesA === 0 && gamesB > 0) return 1;
-        if (gamesB === 0 && gamesA > 0) return -1;
-        const pctA = a.wins / gamesA;
-        const pctB = b.wins / gamesB;
-        if (pctB !== pctA) return pctB - pctA;
-        const diffA = a.pf - a.pa;
-        const diffB = b.pf - b.pa;
-        if (diffB !== diffA) return diffB - diffA;
-        if (b.pf !== a.pf) return b.pf - a.pf;
-        const overallA = getTeamOverall(a.team);
-        const overallB = getTeamOverall(b.team);
-        if (overallB !== overallA) return overallB - overallA;
-        return teamName(a.team).localeCompare(teamName(b.team));
-    });
+  return Object.values(standings).sort((a, b) => {
+    const gamesA = a.wins + a.losses + a.ties;
+    const gamesB = b.wins + b.losses + b.ties;
+    if (gamesA === 0 && gamesB === 0) {
+      const oA = getTeamOverall(a.team), oB = getTeamOverall(b.team);
+      if (oB !== oA) return oB - oA;
+      return teamName(a.team).localeCompare(teamName(b.team));
+    }
+    if (gamesA === 0 && gamesB > 0) return 1;
+    if (gamesB === 0 && gamesA > 0) return -1;
+    const pctA = a.wins / gamesA, pctB = b.wins / gamesB;
+    if (pctB !== pctA) return pctB - pctA;
+    const diffA = a.pf - a.pa, diffB = b.pf - b.pa;
+    if (diffB !== diffA) return diffB - diffA;
+    if (b.pf !== a.pf) return b.pf - a.pf;
+    return teamName(a.team).localeCompare(teamName(b.team));
+  });
 }
 function renderWeeklyGames() {
-    const container = $("weekly-games");
-    if (!container) return;
-    container.innerHTML = "";
-    $("current-week-label").textContent = currentWeek;
-    const weekGames = schedule.filter(scheduledGame => scheduledGame.week === currentWeek);
-    if (weekGames.length === 0) {
-        container.innerHTML = `<div class="empty-note">No games scheduled for Week ${currentWeek}.</div>`;
-        return;
+  const container = $("weekly-games");
+  if (!container) return;
+  container.innerHTML = "";
+  $("current-week-label").textContent = currentWeek;
+  const weekGames = schedule.filter(g => g.week === currentWeek);
+  if (weekGames.length === 0) {
+    container.innerHTML = `<div class="empty-note">No games scheduled for Week ${currentWeek}. (Teams on bye this week)</div>`;
+    return;
+  }
+  weekGames.forEach(scheduledGame => {
+    const card = document.createElement("div");
+    card.className = "week-game-card";
+    const awayName = teamName(scheduledGame.away);
+    const homeName = teamName(scheduledGame.home);
+    if (scheduledGame.played) {
+      card.innerHTML = `<div class="game-teams"><strong>${awayName}</strong><span class="game-score">${scheduledGame.awayScore}</span></div><div class="game-final">FINAL</div><div class="game-teams"><strong>${homeName}</strong><span class="game-score">${scheduledGame.homeScore}</span></div>`;
+    } else {
+      card.innerHTML = `<div class="game-teams"><strong>${awayName}</strong></div><div class="game-vs">@</div><div class="game-teams"><strong>${homeName}</strong></div><button class="btn primary play-scheduled-game">Play Game</button>`;
+      card.querySelector(".play-scheduled-game").addEventListener("click", () => {
+        window.currentScheduledGame = scheduledGame;
+        game = createNewGame(scheduledGame.home, scheduledGame.away, scheduledGame);
+        updateUI();
+        showScreen("game-screen");
+      });
     }
-    weekGames.forEach(scheduledGame => {
-        const card = document.createElement("div");
-        card.className = "week-game-card";
-        const awayName = teamName(scheduledGame.away);
-        const homeName = teamName(scheduledGame.home);
-        if (scheduledGame.played) {
-            card.innerHTML = `
-                <div class="game-teams"><strong>${awayName}</strong><span class="game-score">${scheduledGame.awayScore}</span></div>
-                <div class="game-final">FINAL</div>
-                <div class="game-teams"><strong>${homeName}</strong><span class="game-score">${scheduledGame.homeScore}</span></div>`;
-        } else {
-            card.innerHTML = `
-                <div class="game-teams"><strong>${awayName}</strong></div>
-                <div class="game-vs">@</div>
-                <div class="game-teams"><strong>${homeName}</strong></div>
-                <button class="btn primary play-scheduled-game">Play Game</button>`;
-            card.querySelector(".play-scheduled-game").addEventListener("click", () => {
-                window.currentScheduledGame = scheduledGame;
-                game = createNewGame(scheduledGame.home, scheduledGame.away, scheduledGame);
-                updateUI();
-                showScreen("game-screen");
-            });
-        }
-        container.appendChild(card);
-    });
+    container.appendChild(card);
+  });
 }
-function renderSchedule(){
+function renderSchedule() {
   const container = $("schedule-container");
   if (!container) return;
   container.innerHTML = "";
   const weeks = {};
   schedule.forEach(g => {
-    if(!weeks[g.week]) weeks[g.week] = [];
+    if (!weeks[g.week]) weeks[g.week] = [];
     weeks[g.week].push(g);
   });
-  Object.keys(weeks).sort((a,b)=>a-b).forEach(week=>{
+  Object.keys(weeks).sort((a, b) => a - b).forEach(week => {
     const weekBox = document.createElement("div");
     weekBox.className = "schedule-week";
-    weekBox.innerHTML = `<div class="schedule-week-header">WEEK ${week}</div>`;
-    weeks[week].forEach(g=>{
+    weekBox.innerHTML = `<div class="schedule-week-header">WEEK ${week} <span style="color:#64748b;font-weight:400;font-size:0.85rem">(${weeks[week].length} games)</span></div>`;
+    weeks[week].forEach(g => {
       const gameCard = document.createElement("div");
       gameCard.className = "schedule-game";
-      gameCard.innerHTML = `
-        <div class="schedule-team away-team"><span>${teamName(g.away)}</span></div>
-        <div class="schedule-at">@</div>
-        <div class="schedule-team home-team"><span>${teamName(g.home)}</span></div>`;
+      const result = g.played ? ` ${g.awayScore}-${g.homeScore}` : "";
+      gameCard.innerHTML = `<div class="schedule-team away-team"><span>${teamName(g.away)}</span></div><div class="schedule-at">@</div><div class="schedule-team home-team"><span>${teamName(g.home)}</span></div>${result ? `<div class="game-final" style="margin-left:8px">${result}</div>` : ""}`;
       weekBox.appendChild(gameCard);
     });
     container.appendChild(weekBox);
   });
 }
 function renderStandings() {
-    const container = $("standings-container");
-    if (!container) return;
-    container.innerHTML = "";
-    const viewSelect = $("standings-view-select");
-    const view = viewSelect ? viewSelect.value : "league";
-    const sorted = getSortedStandings();
-    if (view === "league") {
-        const leagueBox = document.createElement("div");
-        leagueBox.className = "standings-section";
-        leagueBox.innerHTML = `
-            <div class="standings-section-header"><h3>League</h3></div>
-            <div class="standings-table-wrapper">
-                <table class="standings-table">
-                    <thead><tr><th>Rank</th><th>Team</th><th>Conference</th><th>Division</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>`;
-        const tbody = leagueBox.querySelector("tbody");
-        sorted.forEach((row, index) => {
-            const tr = document.createElement("tr");
-            tr.className = "standings-team-row";
-            tr.innerHTML = `<td>${index + 1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.conference}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`;
-            tr.addEventListener("click", () => {
-                openTeamPage(TEAMS.findIndex(t => teamKey(t) === teamKey(row.team)));
-            });
-            tbody.appendChild(tr);
-        });
-        container.appendChild(leagueBox);
-        return;
-    }
-    if (view === "conference") {
-        ["AFC", "NFC"].forEach(conference => {
-            const conferenceBox = document.createElement("div");
-            conferenceBox.className = "conference-box";
-            conferenceBox.innerHTML = `
-                <div class="standings-section-header"><h3>${conference}</h3></div>
-                <div class="standings-table-wrapper">
-                    <table class="standings-table">
-                        <thead><tr><th>Rank</th><th>Team</th><th>Division</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>`;
-            const tbody = conferenceBox.querySelector("tbody");
-            sorted.filter(row => row.team.conference === conference).forEach((row, index) => {
-                const tr = document.createElement("tr");
-                tr.className = "standings-team-row";
-                tr.innerHTML = `<td>${index + 1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`;
-                tr.addEventListener("click", () => openTeamPage(TEAMS.findIndex(t => teamKey(t) === teamKey(row.team))));
-                tbody.appendChild(tr);
-            });
-            container.appendChild(conferenceBox);
-        });
-        return;
-    }
-    if (view === "division") {
-        ["AFC", "NFC"].forEach(conference => {
-            const conferenceHeader = document.createElement("div");
-            conferenceHeader.className = "conference-heading";
-            conferenceHeader.innerHTML = `<h2>${conference}</h2>`;
-            container.appendChild(conferenceHeader);
-            ["East", "North", "South", "West"].forEach(division => {
-                const divisionBox = document.createElement("div");
-                divisionBox.className = "division-box";
-                divisionBox.innerHTML = `
-                    <div class="standings-section-header"><h3>${conference} ${division}</h3></div>
-                    <div class="standings-table-wrapper">
-                        <table class="standings-table">
-                            <thead><tr><th>Rank</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>`;
-                const tbody = divisionBox.querySelector("tbody");
-                sorted.filter(row => row.team.conference === conference && row.team.division === division).forEach((row, index) => {
-                    const tr = document.createElement("tr");
-                    tr.className = "standings-team-row";
-                    tr.innerHTML = `<td>${index + 1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`;
-                    tr.addEventListener("click", () => openTeamPage(TEAMS.findIndex(t => teamKey(t) === teamKey(row.team))));
-                    tbody.appendChild(tr);
-                });
-                container.appendChild(divisionBox);
-            });
-        });
-    }
+  const container = $("standings-container");
+  if (!container) return;
+  container.innerHTML = "";
+  const view = $("standings-view-select") ? $("standings-view-select").value : "league";
+  const sorted = getSortedStandings();
+  function makeRow(row, index, cols) {
+    const tr = document.createElement("tr");
+    tr.className = "standings-team-row";
+    tr.innerHTML = cols;
+    tr.addEventListener("click", () => openTeamPage(TEAMS.findIndex(t => teamKey(t) === teamKey(row.team))));
+    return tr;
+  }
+  if (view === "league") {
+    const box = document.createElement("div");
+    box.className = "standings-section";
+    box.innerHTML = `<div class="standings-section-header"><h3>League</h3></div><div class="standings-table-wrapper"><table class="standings-table"><thead><tr><th>Rank</th><th>Team</th><th>Conference</th><th>Division</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead><tbody></tbody></table></div>`;
+    const tbody = box.querySelector("tbody");
+    sorted.forEach((row, i) => tbody.appendChild(makeRow(row, i, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.conference}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
+    container.appendChild(box);
+    return;
+  }
+  if (view === "conference") {
+    ["AFC", "NFC"].forEach(conf => {
+      const box = document.createElement("div");
+      box.className = "conference-box";
+      box.innerHTML = `<div class="standings-section-header"><h3>${conf}</h3></div><div class="standings-table-wrapper"><table class="standings-table"><thead><tr><th>Rank</th><th>Team</th><th>Division</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead><tbody></tbody></table></div>`;
+      const tbody = box.querySelector("tbody");
+      sorted.filter(r => r.team.conference === conf).forEach((row, i) => tbody.appendChild(makeRow(row, i, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.team.division}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
+      container.appendChild(box);
+    });
+    return;
+  }
+  if (view === "division") {
+    ["AFC", "NFC"].forEach(conf => {
+      const h = document.createElement("div");
+      h.className = "conference-heading";
+      h.innerHTML = `<h2>${conf}</h2>`;
+      container.appendChild(h);
+      ["East", "North", "South", "West"].forEach(div => {
+        const box = document.createElement("div");
+        box.className = "division-box";
+        box.innerHTML = `<div class="standings-section-header"><h3>${conf} ${div}</h3></div><div class="standings-table-wrapper"><table class="standings-table"><thead><tr><th>Rank</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>OVR</th></tr></thead><tbody></tbody></table></div>`;
+        const tbody = box.querySelector("tbody");
+        sorted.filter(r => r.team.conference === conf && r.team.division === div).forEach((row, i) => tbody.appendChild(makeRow(row, i, `<td>${i+1}</td><td class="team-name-cell">${teamName(row.team)}</td><td>${row.wins}</td><td>${row.losses}</td><td>${row.ties}</td><td class="team-overall-cell">${getTeamOverall(row.team)}</td>`)));
+        container.appendChild(box);
+      });
+    });
+  }
 }
-// ============================================
-// AWARDS
-// ============================================
 const AWARD_DEFINITIONS = [
-  { id: "mvp", title: "League MVP" },
-  { id: "offensive_poy", title: "Offensive Player of the Year" },
-  { id: "defensive_poy", title: "Defensive Player of the Year" },
-  { id: "rookie", title: "Rookie of the Year" },
-  { id: "coach", title: "Coach of the Year" },
-  { id: "comeback", title: "Comeback Player of the Year" },
-  { id: "most_improved", title: "Most Improved Player" },
-  { id: "best_qb", title: "Best Quarterback" },
-  { id: "best_rb", title: "Best Running Back" },
-  { id: "best_wr", title: "Best Wide Receiver" },
+  { id: "mvp", title: "League MVP" }, { id: "offensive_poy", title: "Offensive Player of the Year" },
+  { id: "defensive_poy", title: "Defensive Player of the Year" }, { id: "rookie", title: "Rookie of the Year" },
+  { id: "coach", title: "Coach of the Year" }, { id: "comeback", title: "Comeback Player of the Year" },
+  { id: "most_improved", title: "Most Improved Player" }, { id: "best_qb", title: "Best Quarterback" },
+  { id: "best_rb", title: "Best Running Back" }, { id: "best_wr", title: "Best Wide Receiver" },
   { id: "best_defense", title: "Best Defense" },
 ];
 function createEmptyAwards() {
@@ -445,6 +336,25 @@ function openTeamPage(teamIndex) {
   const pct = gp === 0 ? ".000" : (rec.wins / gp).toFixed(3).replace(/^0/, "");
   const diff = rec.pf - rec.pa;
   $("team-page-standing").textContent = `#${rank}  |  ${rec.wins}-${rec.losses}-${rec.ties}  |  PCT ${pct}  |  PF ${rec.pf}  PA ${rec.pa}  |  DIFF ${diff > 0 ? "+" : ""}${diff}`;
+  // Upcoming / remaining games from schedule
+  const upcoming = $("team-page-upcoming");
+  if (upcoming) {
+    const teamGames = schedule
+      .filter(g => teamKey(g.home) === key || teamKey(g.away) === key)
+      .sort((a, b) => a.week - b.week);
+    if (teamGames.length === 0) {
+      upcoming.innerHTML = `<p class="empty-note">No schedule yet. Reset Schedule to generate.</p>`;
+    } else {
+      upcoming.innerHTML = teamGames.map(g => {
+        const isHome = teamKey(g.home) === key;
+        const opp = isHome ? g.away : g.home;
+        const loc = isHome ? "vs" : "@";
+        const score = g.played ? ` — ${g.awayScore}-${g.homeScore}` : "";
+        const status = g.played ? "FINAL" : "";
+        return `<div class="schedule-game" style="margin-bottom:6px"><strong>Wk ${g.week}</strong> ${loc} ${teamName(opp)} ${status}${score}</div>`;
+      }).join("");
+    }
+  }
   const players = ROSTERS[key] || [];
   const tbody = $("team-page-roster");
   tbody.innerHTML = "";
@@ -460,17 +370,16 @@ function openTeamPage(teamIndex) {
 }
 let game = null;
 function createNewGame(home, away, scheduledGame = null) {
-    return {
-        home, away, scheduledGame,
-        homeScore: 0, awayScore: 0,
-        quarter: 1, clockSeconds: 15 * 60,
-        possession: "home", down: 1, distance: 10, yardLine: 25,
-        playLog: [`Game started: ${teamName(away)} at ${teamName(home)}`, "Kickoff — ball at the 25"],
-        gameOver: false, resultRecorded: false
-    };
+  return {
+    home, away, scheduledGame,
+    homeScore: 0, awayScore: 0,
+    quarter: 1, clockSeconds: 15 * 60,
+    possession: "home", down: 1, distance: 10, yardLine: 25,
+    playLog: [`Game started: ${teamName(away)} at ${teamName(home)}`, "Kickoff — ball at the 25"],
+    gameOver: false, resultRecorded: false
+  };
 }
 function $(id) { return document.getElementById(id); }
-function populateTeamSelects() {}
 function clockDisplay(seconds) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -485,20 +394,19 @@ function downDisplay(down, distance) {
 }
 function updateUI() {
   if (!game) return;
-  const currentGame = game;
-  $("away-name").textContent = teamName(currentGame.away);
-  $("home-name").textContent = teamName(currentGame.home);
-  $("away-score").textContent = currentGame.awayScore;
-  $("home-score").textContent = currentGame.homeScore;
-  $("quarter").textContent = `Q${currentGame.quarter}`;
-  $("clock").textContent = clockDisplay(currentGame.clockSeconds);
-  $("down-distance").textContent = downDisplay(currentGame.down, currentGame.distance);
-  $("field-pos").textContent = `Ball on ${fieldPosDisplay(currentGame.yardLine)}`;
-  const possessionTeam = currentGame.possession === "home" ? currentGame.home : currentGame.away;
+  $("away-name").textContent = teamName(game.away);
+  $("home-name").textContent = teamName(game.home);
+  $("away-score").textContent = game.awayScore;
+  $("home-score").textContent = game.homeScore;
+  $("quarter").textContent = `Q${game.quarter}`;
+  $("clock").textContent = clockDisplay(game.clockSeconds);
+  $("down-distance").textContent = downDisplay(game.down, game.distance);
+  $("field-pos").textContent = `Ball on ${fieldPosDisplay(game.yardLine)}`;
+  const possessionTeam = game.possession === "home" ? game.home : game.away;
   $("possession-text").textContent = `Possession: ${teamName(possessionTeam)}`;
   const log = $("log-content");
   log.innerHTML = "";
-  currentGame.playLog.slice().reverse().forEach(entry => {
+  game.playLog.slice().reverse().forEach(entry => {
     const div = document.createElement("div");
     div.textContent = entry;
     log.appendChild(div);
@@ -540,112 +448,101 @@ function flipField() {
   if (game.yardLine > 99) game.yardLine = 80;
 }
 function finishGame() {
-    if (!game || game.resultRecorded) return;
-    game.resultRecorded = true;
-    recordGameResult(game.home, game.away, game.homeScore, game.awayScore);
-    if (window.currentScheduledGame) {
-        window.currentScheduledGame.played = true;
-        window.currentScheduledGame.homeScore = game.homeScore;
-        window.currentScheduledGame.awayScore = game.awayScore;
-        saveSchedule();
-        window.currentScheduledGame = null;
-    }
-    alert(`Final Score\n${teamName(game.away)} ${game.awayScore} - ${game.homeScore} ${teamName(game.home)}\n\nStandings have been updated!`);
+  if (!game || game.resultRecorded) return;
+  game.resultRecorded = true;
+  recordGameResult(game.home, game.away, game.homeScore, game.awayScore);
+  if (window.currentScheduledGame) {
+    window.currentScheduledGame.played = true;
+    window.currentScheduledGame.homeScore = game.homeScore;
+    window.currentScheduledGame.awayScore = game.awayScore;
+    saveSchedule();
+    window.currentScheduledGame = null;
+  }
+  alert(`Final Score\n${teamName(game.away)} ${game.awayScore} - ${game.homeScore} ${teamName(game.home)}\n\nStandings have been updated!`);
 }
 function processPlay() {
-    if (!game || game.gameOver) return;
-    const roll = {
-        d4: parseInt($("die-1").value),
-        d10_0_9: parseInt($("die-2").value),
-        d8: parseInt($("die-3").value),
-        d100_tens: parseInt($("die-4").value),
-        d20: parseInt($("die-5").value),
-        d10: parseInt($("die-6").value),
-        d6: parseInt($("die-7").value)
-    };
-    if ([roll.d4, roll.d10_0_9, roll.d8, roll.d100_tens, roll.d20, roll.d10, roll.d6].some(Number.isNaN)) {
-        alert("Enter the result of all seven dice.");
-        return;
-    }
-    if (
-        roll.d4 < 1 || roll.d4 > 4 ||
-        roll.d10_0_9 < 0 || roll.d10_0_9 > 9 ||
-        roll.d8 < 1 || roll.d8 > 8 ||
-        roll.d100_tens < 0 || roll.d100_tens > 90 || roll.d100_tens % 10 !== 0 ||
-        roll.d20 < 1 || roll.d20 > 20 ||
-        roll.d10 < 1 || roll.d10 > 10 ||
-        roll.d6 < 1 || roll.d6 > 6
-    ) {
-        alert("One or more dice results are invalid.");
-        return;
-    }
-    const current = game.possession === "home" ? game.home : game.away;
-    const other = game.possession === "home" ? game.away : game.home;
-    const team = teamName(current);
-    const outcome = DiceEngine.determinePlayOutcome(roll);
-    let description = "";
-    let timeUsed = 30;
-    switch (outcome.type) {
-        case "run":
-            description = `${team} — ${outcome.name} for ${outcome.yards} yards`;
-            game.yardLine += outcome.yards; timeUsed = 35;
-            if (outcome.yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
-            else { game.down++; game.distance -= outcome.yards; if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); } }
-            break;
-        case "pass_complete":
-            description = `${team} — ${outcome.name} for ${outcome.yards} yards`;
-            game.yardLine += outcome.yards; timeUsed = 28;
-            if (outcome.yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
-            else { game.down++; game.distance -= outcome.yards; if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); } }
-            break;
-        case "pass_incomplete":
-            description = `${team} — INCOMPLETE PASS`;
-            game.down++; timeUsed = 12;
-            if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); }
-            break;
-        case "sack":
-            description = `${team} — SACK, LOSS OF ${Math.abs(outcome.yards)} YARDS`;
-            game.yardLine += outcome.yards; game.distance += Math.abs(outcome.yards); game.down++; timeUsed = 25;
-            if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); }
-            break;
-        case "interception":
-            description = `INTERCEPTION! ${team} throws an interception.`;
-            switchPossession(); flipField(); timeUsed = 20;
-            break;
-        case "fumble":
-            description = `FUMBLE! ${team} fumbles the ball. ${teamName(other)} recovers!`;
-            switchPossession(); flipField(); timeUsed = 25;
-            break;
-        case "big_play":
-            description = `${team} — BIG PLAY for ${outcome.yards} yards!`;
-            game.yardLine += outcome.yards; timeUsed = 30;
-            if (outcome.yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
-            else { game.down++; game.distance -= outcome.yards; }
-            break;
-        case "penalty":
-            description = `${team} — PENALTY, ${outcome.yards} YARD PENALTY`;
-            game.yardLine -= outcome.yards; timeUsed = 10;
-            break;
-        case "punt":
-            description = `${team} punts ${outcome.yards} yards.`;
-            switchPossession();
-            game.yardLine = 100 - (game.yardLine + outcome.yards);
-            if (game.yardLine < 1) game.yardLine = 20;
-            timeUsed = 15;
-            break;
-    }
-    if (game.yardLine < 0) game.yardLine = 0;
-    if (game.yardLine > 100) game.yardLine = 100;
-    game.playLog.push(description);
-    ["die-1","die-2","die-3","die-4","die-5","die-6","die-7"].forEach(id => { $(id).value = ""; });
-    applyTime(timeUsed);
-    updateUI();
+  if (!game || game.gameOver) return;
+  const roll = {
+    d4: parseInt($("die-1").value),
+    d10_0_9: parseInt($("die-2").value),
+    d8: parseInt($("die-3").value),
+    d100_tens: parseInt($("die-4").value),
+    d20: parseInt($("die-5").value),
+    d10: parseInt($("die-6").value),
+    d6: parseInt($("die-7").value)
+  };
+  if ([roll.d4, roll.d10_0_9, roll.d8, roll.d100_tens, roll.d20, roll.d10, roll.d6].some(Number.isNaN)) {
+    alert("Enter the result of all seven dice.");
+    return;
+  }
+  if (roll.d4 < 1 || roll.d4 > 4 || roll.d10_0_9 < 0 || roll.d10_0_9 > 9 || roll.d8 < 1 || roll.d8 > 8 ||
+      roll.d100_tens < 0 || roll.d100_tens > 90 || roll.d100_tens % 10 !== 0 ||
+      roll.d20 < 1 || roll.d20 > 20 || roll.d10 < 1 || roll.d10 > 10 || roll.d6 < 1 || roll.d6 > 6) {
+    alert("One or more dice results are invalid.");
+    return;
+  }
+  const current = game.possession === "home" ? game.home : game.away;
+  const other = game.possession === "home" ? game.away : game.home;
+  const team = teamName(current);
+  const outcome = DiceEngine.determinePlayOutcome(roll);
+  let description = "";
+  let timeUsed = 30;
+  switch (outcome.type) {
+    case "run":
+      description = `${team} — ${outcome.name} for ${outcome.yards} yards`;
+      game.yardLine += outcome.yards; timeUsed = 35;
+      if (outcome.yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
+      else { game.down++; game.distance -= outcome.yards; if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); } }
+      break;
+    case "pass_complete":
+      description = `${team} — ${outcome.name} for ${outcome.yards} yards`;
+      game.yardLine += outcome.yards; timeUsed = 28;
+      if (outcome.yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
+      else { game.down++; game.distance -= outcome.yards; if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); } }
+      break;
+    case "pass_incomplete":
+      description = `${team} — INCOMPLETE PASS`; game.down++; timeUsed = 12;
+      if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); }
+      break;
+    case "sack":
+      description = `${team} — SACK, LOSS OF ${Math.abs(outcome.yards)} YARDS`;
+      game.yardLine += outcome.yards; game.distance += Math.abs(outcome.yards); game.down++; timeUsed = 25;
+      if (game.down > 4) { description += " — TURNOVER ON DOWNS"; switchPossession(); flipField(); }
+      break;
+    case "interception":
+      description = `INTERCEPTION! ${team} throws an interception.`; switchPossession(); flipField(); timeUsed = 20; break;
+    case "fumble":
+      description = `FUMBLE! ${team} fumbles. ${teamName(other)} recovers!`; switchPossession(); flipField(); timeUsed = 25; break;
+    case "big_play":
+      description = `${team} — BIG PLAY for ${outcome.yards} yards!`; game.yardLine += outcome.yards; timeUsed = 30;
+      if (outcome.yards >= game.distance) { game.down = 1; game.distance = 10; description += " — FIRST DOWN!"; }
+      else { game.down++; game.distance -= outcome.yards; }
+      break;
+    case "penalty":
+      description = `${team} — PENALTY, ${outcome.yards} YARDS`; game.yardLine -= outcome.yards; timeUsed = 10; break;
+    case "punt":
+      description = `${team} punts ${outcome.yards} yards.`; switchPossession();
+      game.yardLine = 100 - (game.yardLine + outcome.yards);
+      if (game.yardLine < 1) game.yardLine = 20;
+      timeUsed = 15; break;
+  }
+  if (game.yardLine < 0) game.yardLine = 0;
+  if (game.yardLine > 100) game.yardLine = 100;
+  game.playLog.push(description);
+  ["die-1","die-2","die-3","die-4","die-5","die-6","die-7"].forEach(id => { $(id).value = ""; });
+  applyTime(timeUsed);
+  updateUI();
 }
 window.addEventListener("DOMContentLoaded", () => {
+  // Schedule generator script loads after this file; call after a tick if needed
   generateSchedule();
+  // If generator wasn't ready yet (empty schedule), try once more
+  if (schedule.length === 0 && window.ScheduleGenerator) {
+    generateSchedule(true);
+  }
   currentWeek = parseInt(localStorage.getItem("mfl-current-week")) || 1;
   renderWeeklyGames();
-  populateTeamSelects();
+
   document.querySelectorAll(".sidebar-btn").forEach(btn => {
     btn.addEventListener("click", () => showScreen(btn.dataset.screen));
   });
@@ -668,14 +565,14 @@ window.addEventListener("DOMContentLoaded", () => {
     showScreen("setup-screen");
   });
   $("reset-standings-btn").addEventListener("click", () => {
-    if (confirm("Are you sure you want to reset all standings to 0-0?")) {
+    if (confirm("Reset all standings to 0-0?")) {
       standings = createEmptyStandings();
       saveStandings(standings);
       renderStandings();
     }
   });
   $("reset-awards-btn").addEventListener("click", () => {
-    if (confirm("Are you sure you want to clear all awards?")) {
+    if (confirm("Clear all awards?")) {
       awards = createEmptyAwards();
       saveAwards(awards);
       renderAwards();
@@ -684,4 +581,21 @@ window.addEventListener("DOMContentLoaded", () => {
   const resetScheduleBtn = $("reset-schedule-btn");
   if (resetScheduleBtn) resetScheduleBtn.addEventListener("click", resetSchedule);
   $("back-to-standings").addEventListener("click", () => showScreen("standings-screen"));
+
+  const prevWeek = $("prev-week-btn");
+  const nextWeek = $("next-week-btn");
+  if (prevWeek) prevWeek.addEventListener("click", () => {
+    if (currentWeek > 1) {
+      currentWeek--;
+      localStorage.setItem("mfl-current-week", String(currentWeek));
+      renderWeeklyGames();
+    }
+  });
+  if (nextWeek) nextWeek.addEventListener("click", () => {
+    if (currentWeek < 18) {
+      currentWeek++;
+      localStorage.setItem("mfl-current-week", String(currentWeek));
+      renderWeeklyGames();
+    }
+  });
 });
