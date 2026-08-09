@@ -1,13 +1,23 @@
 // ============================================
-// STARTERS / BENCH + PLAYER STATS + AWARD PROJECTIONS
+// STARTERS / BENCH + STATS + INJURIES + AWARDS
 // ============================================
 
 window.PlayerSystem = {
-  // How many starters per position (depth chart)
   STARTER_SLOTS: {
     QB: 1, RB: 2, WR: 3, TE: 1, OL: 5,
     DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1
   },
+
+  INJURY_TYPES: [
+    { name: "ankle sprain", minGames: 1, maxGames: 3 },
+    { name: "hamstring", minGames: 1, maxGames: 4 },
+    { name: "concussion", minGames: 1, maxGames: 2 },
+    { name: "shoulder", minGames: 2, maxGames: 5 },
+    { name: "knee sprain", minGames: 2, maxGames: 6 },
+    { name: "ribs", minGames: 1, maxGames: 3 },
+    { name: "wrist", minGames: 1, maxGames: 3 },
+    { name: "quad strain", minGames: 1, maxGames: 3 }
+  ],
 
   emptyStat() {
     return {
@@ -24,15 +34,19 @@ window.PlayerSystem = {
   },
 
   loadStats() {
-    try {
-      return JSON.parse(localStorage.getItem("mfl-player-stats") || "{}");
-    } catch (e) {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem("mfl-player-stats") || "{}"); }
+    catch (e) { return {}; }
   },
-
   saveStats(stats) {
     localStorage.setItem("mfl-player-stats", JSON.stringify(stats));
+  },
+
+  loadInjuries() {
+    try { return JSON.parse(localStorage.getItem("mfl-injuries") || "{}"); }
+    catch (e) { return {}; }
+  },
+  saveInjuries(map) {
+    localStorage.setItem("mfl-injuries", JSON.stringify(map));
   },
 
   getStat(team, player) {
@@ -42,7 +56,7 @@ window.PlayerSystem = {
   },
 
   addStat(team, player, patch) {
-    if (!team || !player) return;
+    if (!team || !player || !patch) return;
     const all = this.loadStats();
     const id = this.playerId(team, player);
     const cur = all[id] || this.emptyStat();
@@ -53,7 +67,53 @@ window.PlayerSystem = {
     this.saveStats(all);
   },
 
-  /** Mark starter/bench on every roster (by rating within position). */
+  isInjured(team, player) {
+    if (!team || !player) return false;
+    const inj = this.loadInjuries()[this.playerId(team, player)];
+    return !!(inj && inj.gamesLeft > 0);
+  },
+
+  getInjury(team, player) {
+    if (!team || !player) return null;
+    return this.loadInjuries()[this.playerId(team, player)] || null;
+  },
+
+  /** Injure a player for 1–N games. Returns injury record. */
+  injure(team, player) {
+    if (!team || !player) return null;
+    const type = this.INJURY_TYPES[Math.floor(Math.random() * this.INJURY_TYPES.length)];
+    const gamesLeft = type.minGames + Math.floor(Math.random() * (type.maxGames - type.minGames + 1));
+    const all = this.loadInjuries();
+    const rec = {
+      type: type.name,
+      gamesLeft,
+      playerName: player.name,
+      position: player.position,
+      wasStarter: !!player.starter,
+      teamKey: teamKey(team)
+    };
+    all[this.playerId(team, player)] = rec;
+    this.saveInjuries(all);
+    return rec;
+  },
+
+  /** After a team's game is completed, tick down their injuries by 1. */
+  tickInjuriesForTeam(team) {
+    if (!team) return;
+    const all = this.loadInjuries();
+    const key = teamKey(team);
+    let changed = false;
+    Object.keys(all).forEach(id => {
+      if (!id.startsWith(key + "::")) return;
+      all[id].gamesLeft = (all[id].gamesLeft || 1) - 1;
+      if (all[id].gamesLeft <= 0) {
+        delete all[id];
+      }
+      changed = true;
+    });
+    if (changed) this.saveInjuries(all);
+  },
+
   applyDepthCharts() {
     if (typeof ROSTERS === "undefined") return;
     Object.keys(ROSTERS).forEach(key => {
@@ -74,49 +134,102 @@ window.PlayerSystem = {
     });
   },
 
-  starters(team, pos) {
-    const list = (ROSTERS[teamKey(team)] || []).filter(p => p.position === pos);
-    list.sort((a, b) => (b.starter === a.starter ? b.rating - a.rating : (b.starter ? 1 : 0) - (a.starter ? 1 : 0)));
-    return list.filter(p => p.starter);
+  /** All players at positions, sorted starter-first then rating. */
+  depthList(team, positions) {
+    const list = [];
+    const roster = ROSTERS[teamKey(team)] || [];
+    positions.forEach(pos => {
+      roster.filter(p => p.position === pos).forEach(p => list.push(p));
+    });
+    list.sort((a, b) => {
+      if (a.starter !== b.starter) return a.starter ? -1 : 1;
+      return b.rating - a.rating;
+    });
+    return list;
   },
 
-  /** Weighted pick among starters (higher rating more likely). */
-  pickStarter(team, positions) {
-    const pool = [];
-    positions.forEach(pos => {
-      this.starters(team, pos).forEach(p => pool.push(p));
-    });
+  starters(team, pos) {
+    return this.depthList(team, [pos]).filter(p => p.starter);
+  },
+
+  /**
+   * Pick who actually plays: first healthy player in depth chart.
+   * Prefer starters; fall back to bench if starters are hurt.
+   */
+  pickAvailable(team, positions) {
+    const list = this.depthList(team, positions);
+    const healthy = list.filter(p => !this.isInjured(team, p));
+    const pool = healthy.length ? healthy : list; // last resort: use injured if everyone hurt
     if (!pool.length) {
-      const all = ROSTERS[teamKey(team)] || [];
-      return all[0] || { name: "Unknown", position: positions[0], rating: 70, starter: true };
+      return { name: "Unknown", position: positions[0], rating: 70, starter: true };
     }
-    const weights = pool.map(p => Math.max(1, p.rating - 40));
+    // Weighted among healthy, still favoring higher rating / starters
+    const weights = pool.map(p => Math.max(1, (p.starter ? 25 : 0) + p.rating - 40));
     const sum = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * sum;
     for (let i = 0; i < pool.length; i++) {
       r -= weights[i];
       if (r <= 0) return pool[i];
     }
-    return pool[pool.length - 1];
+    return pool[0];
   },
 
+  // Back-compat alias used by drive engine
+  pickStarter(team, positions) {
+    return this.pickAvailable(team, positions);
+  },
+
+  /** Offense OVR using currently available (non-injured preferred) skill players. */
   offenseOverall(team) {
     const pos = ["QB", "RB", "WR", "TE", "OL"];
-    const starters = [];
-    pos.forEach(p => this.starters(team, p).forEach(x => starters.push(x)));
-    if (!starters.length) return getTeamOverall(team);
-    return Math.round(starters.reduce((s, p) => s + p.rating, 0) / starters.length);
+    const units = [];
+    pos.forEach(p => {
+      const avail = this.depthList(team, [p]).filter(x => !this.isInjured(team, x));
+      const take = (this.STARTER_SLOTS[p] || 1);
+      (avail.length ? avail : this.depthList(team, [p])).slice(0, take).forEach(x => units.push(x));
+    });
+    if (!units.length) return getTeamOverall(team);
+    return Math.round(units.reduce((s, p) => s + p.rating, 0) / units.length);
   },
 
   defenseOverall(team) {
     const pos = ["DL", "LB", "CB", "S"];
-    const starters = [];
-    pos.forEach(p => this.starters(team, p).forEach(x => starters.push(x)));
-    if (!starters.length) return getTeamOverall(team);
-    return Math.round(starters.reduce((s, p) => s + p.rating, 0) / starters.length);
+    const units = [];
+    pos.forEach(p => {
+      const avail = this.depthList(team, [p]).filter(x => !this.isInjured(team, x));
+      const take = (this.STARTER_SLOTS[p] || 1);
+      (avail.length ? avail : this.depthList(team, [p])).slice(0, take).forEach(x => units.push(x));
+    });
+    if (!units.length) return getTeamOverall(team);
+    return Math.round(units.reduce((s, p) => s + p.rating, 0) / units.length);
   },
 
-  /** Award projection leaders from season stats. */
+  /**
+   * Chance to injure a player involved in a play.
+   * Higher on sacks, big hits, runs between tackles.
+   * Returns injury log line or null.
+   */
+  maybeInjureFromPlay(team, player, playType) {
+    if (!team || !player || this.isInjured(team, player)) return null;
+    let chance = 0.012; // base ~1.2%
+    if (playType === "sack" || playType === "safety") chance = 0.04;
+    else if (playType === "run_big" || playType === "touchdown_run") chance = 0.025;
+    else if (playType === "run_short" || playType === "run_medium" || playType === "stuff") chance = 0.018;
+    else if (playType === "interception" || playType === "fumble") chance = 0.02;
+    else if (playType === "pass_deep") chance = 0.015;
+
+    if (Math.random() > chance) return null;
+
+    const rec = this.injure(team, player);
+    if (!rec) return null;
+    const role = player.starter ? "starter" : "backup";
+    return {
+      text: `INJURY: ${player.name} (${player.position}, ${role}) — ${rec.type}, out ~${rec.gamesLeft} game${rec.gamesLeft > 1 ? "s" : ""}`,
+      injury: rec,
+      player
+    };
+  },
+
   projections() {
     const all = this.loadStats();
     const rows = [];
@@ -127,14 +240,12 @@ window.PlayerSystem = {
       const players = ROSTERS[tKey] || [];
       const player = players.find(p => p.name === name);
       if (!player || !team) return;
-      const s = all[id];
-      rows.push({ team, player, stats: s });
+      rows.push({ team, player, stats: all[id] });
     });
 
     const scoreMVP = r =>
       r.stats.passYds * 0.04 + r.stats.passTd * 6 + r.stats.rushYds * 0.1 +
       r.stats.rushTd * 6 + r.stats.recYds * 0.1 + r.stats.recTd * 6 - r.stats.interceptions * 3;
-    const scoreOPOY = scoreMVP;
     const scoreDPOY = r => r.stats.tackles * 1.2 + r.stats.sacks * 8 + r.stats.interceptions * 10 + r.stats.deflections * 2;
     const scoreQB = r => r.player.position === "QB" ? scoreMVP(r) : -1;
     const scoreRB = r => r.player.position === "RB" ? r.stats.rushYds + r.stats.rushTd * 40 + r.stats.recYds * 0.5 : -1;
@@ -150,7 +261,7 @@ window.PlayerSystem = {
 
     return {
       mvp: top(scoreMVP),
-      offensive_poy: top(scoreOPOY),
+      offensive_poy: top(scoreMVP),
       defensive_poy: top(scoreDPOY),
       best_qb: top(scoreQB),
       best_rb: top(scoreRB),
@@ -159,7 +270,6 @@ window.PlayerSystem = {
   }
 };
 
-// Apply depth charts as soon as ROSTERS exist
 if (typeof ROSTERS !== "undefined") {
   window.PlayerSystem.applyDepthCharts();
 }
