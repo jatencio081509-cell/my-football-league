@@ -32,12 +32,8 @@
   position: relative;
   background: rgba(12, 35, 70, 0.5);
 }
-.field-endzone-away {
-  border-right: 3px solid #ffffff;
-}
-.field-endzone-home {
-  border-left: 3px solid #ffffff;
-}
+.field-endzone-away { border-right: 3px solid #ffffff; }
+.field-endzone-home { border-left: 3px solid #ffffff; }
 
 .field-mid {
   flex: 1;
@@ -51,7 +47,6 @@
       rgba(255, 255, 255, 0.28) 10%
     );
 }
-
 .field-mid::before {
   content: "";
   position: absolute;
@@ -68,14 +63,12 @@
 }
 
 .field-yard-lines { display: none; }
-
 .field-yard-numbers {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 2;
 }
-
 .yard-num {
   position: absolute;
   top: 10%;
@@ -84,13 +77,9 @@
   font-weight: 800;
   font-size: 12px;
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  letter-spacing: 0.4px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
-.yard-num.bottom {
-  top: auto;
-  bottom: 10%;
-}
+.yard-num.bottom { top: auto; bottom: 10%; }
 
 .field-hashes {
   position: absolute;
@@ -103,7 +92,36 @@
 .field-hashes-top { top: 40%; }
 .field-hashes-bot { bottom: 40%; }
 
-/* ESPN blue line of scrimmage */
+/* Drive progress: thick bar from drive start → current LOS */
+.drive-progress {
+  position: absolute;
+  top: 28%;
+  height: 44%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 140, 0, 0.35),
+    rgba(255, 180, 40, 0.55)
+  );
+  border-top: 2px solid rgba(255, 200, 60, 0.95);
+  border-bottom: 2px solid rgba(255, 200, 60, 0.95);
+  z-index: 4;
+  transition: left 0.35s ease, width 0.35s ease;
+  pointer-events: none;
+  box-shadow: 0 0 12px rgba(255, 160, 0, 0.35);
+}
+
+.drive-start-marker {
+  position: absolute;
+  top: 22%;
+  bottom: 22%;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 220, 120, 0.95);
+  z-index: 5;
+  transition: left 0.35s ease;
+}
+
+/* Blue LOS */
 .los-marker {
   position: absolute;
   top: 0;
@@ -112,10 +130,9 @@
   margin-left: -1.5px;
   background: #00a3e0;
   box-shadow: 0 0 8px rgba(0, 163, 224, 0.75);
-  z-index: 6;
+  z-index: 7;
   transition: left 0.35s ease;
 }
-/* Tiny football pip at center of LOS (not a big ball) */
 .los-marker::before {
   content: "";
   position: absolute;
@@ -127,10 +144,9 @@
   background: #c9a227;
   border-radius: 50% / 42%;
   border: 1px solid #4a3a10;
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.45);
 }
 
-/* ESPN yellow first-down line */
+/* Yellow first down */
 .first-down-marker {
   position: absolute;
   top: 0;
@@ -139,25 +155,23 @@
   margin-left: -1.5px;
   background: #f5c518;
   box-shadow: 0 0 8px rgba(245, 197, 24, 0.7);
-  z-index: 5;
+  z-index: 6;
   transition: left 0.35s ease;
 }
 
-/* Soft band between LOS and first down (yards to go) */
+/* Yards-to-go tint between LOS and first down */
 .drive-band {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(0, 163, 224, 0.12);
+  background: rgba(0, 163, 224, 0.1);
   z-index: 3;
   transition: left 0.35s ease, width 0.35s ease;
   pointer-events: none;
 }
 
 .ball-marker,
-.play-trail {
-  display: none !important;
-}
+.play-trail { display: none !important; }
 
 .field-overlay {
   position: absolute;
@@ -166,7 +180,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 0 4px;
-  z-index: 8;
+  z-index: 9;
   pointer-events: none;
 }
 .field-end-label {
@@ -178,9 +192,7 @@
   font-size: 0.7rem;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
 }
-.field-end-home {
-  transform: none;
-}
+.field-end-home { transform: none; }
 
 .field-legend {
   display: flex;
@@ -204,3 +216,9 @@
 }
 .field-legend .lg-los { background: #00a3e0; }
 .field-legend .lg-fd { background: #f5c518; }
+.field-legend .lg-drive {
+  width: 18px;
+  height: 8px;
+  background: linear-gradient(90deg, rgba(255, 140, 0, 0.7), rgba(255, 180, 40, 0.9));
+  border-radius: 2px;
+}
