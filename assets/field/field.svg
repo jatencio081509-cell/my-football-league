@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="600" viewBox="0 0 1600 600">
+  <rect width="1600" height="600" fill="#1E7B44"/>
+  <rect x="0" y="0" width="120" height="600" fill="#122438" opacity="0.35"/>
+  <rect x="1480" y="0" width="120" height="600" fill="#122438" opacity="0.35"/>
+  <line x1="800" y1="0" x2="800" y2="600" stroke="#FFFFFF" stroke-width="4" opacity="0.9"/>
+  <text x="800" y="310" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="48" fill="#FDB813">FIELD</text>
+  <text x="800" y="360" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" fill="#FFFFFF">drop field.png here</text>
+</svg>
