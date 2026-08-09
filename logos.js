@@ -14,9 +14,12 @@ window.MFLLogos = {
   LOADING_IMAGE_CANDIDATES: [
     "assets/logos/app/loading.gif",
     "assets/logos/app/loading.png",
-    "assets/logos/app/logo.png"
+    "assets/logos/app/loading.svg",
+    "assets/logos/app/logo.png",
+    "assets/logos/app/logo.svg"
   ],
-  TEAM_EXTS: [".png", ".jpg", ".jpeg", ".webp", ".gif"],
+  // .png first (your real logos); .svg are temporary placeholders
+  TEAM_EXTS: [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"],
 
   teamInitials(team) {
     if (!team) return "TM";
@@ -28,7 +31,6 @@ window.MFLLogos = {
     return `assets/logos/teams/${teamKey(team)}${ext}`;
   },
 
-  /** HTML for a team logo slot (tries .png first, falls back through extensions) */
   slotHTML(team, sizeClass) {
     if (!team) return "";
     const initials = this.teamInitials(team);
@@ -61,7 +63,6 @@ window.MFLLogos = {
     slot.classList.remove("has-logo");
   },
 
-  /** Fill an existing .logo-slot element with app or team logo */
   fillSlot(slotEl, opts) {
     if (!slotEl) return;
     const img = slotEl.querySelector(".logo-img");
@@ -90,7 +91,8 @@ window.MFLLogos = {
         candidates: [
           this.APP_LOGO,
           "assets/logos/app/logo.jpg",
-          "assets/logos/app/logo.webp"
+          "assets/logos/app/logo.webp",
+          "assets/logos/app/logo.svg"
         ]
       });
     });
@@ -105,7 +107,6 @@ window.MFLLogos = {
     });
   },
 
-  /** 10-second loading screen; uses video/gif if present */
   startLoadingScreen() {
     const screen = document.getElementById("loading-screen");
     if (!screen) return;
@@ -132,10 +133,8 @@ window.MFLLogos = {
       screen.classList.add("is-done");
     };
 
-    // Always end by 10s
     setTimeout(finish, DURATION_MS);
 
-    // Prefer video
     if (video) {
       this.LOADING_VIDEO.forEach(s => {
         const source = document.createElement("source");
@@ -152,7 +151,6 @@ window.MFLLogos = {
       video.addEventListener("error", () => {
         this._tryLoadingImage(image, fallback, video);
       });
-      // If nothing loads in 1.5s, try image
       setTimeout(() => {
         if (video.readyState < 2) this._tryLoadingImage(image, fallback, video);
       }, 1500);
