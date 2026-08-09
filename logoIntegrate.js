@@ -1,7 +1,8 @@
-// Runs after renderer.js — logos, week lock, playoffs hook
+// Runs after renderer.js — logos, week lock, playoffs, field visual
 (function () {
   function L() { return window.MFLLogos; }
   function P() { return window.Playoffs; }
+  function F() { return window.FieldVisual; }
 
   window.renderWeeklyGames = function () {
     const container = document.getElementById("weekly-games");
@@ -16,6 +17,7 @@
     if (banner) {
       if (!unlocked) {
         banner.classList.remove("hidden");
+        banner.classList.remove("week-complete");
         banner.innerHTML =
           `<strong>Week ${currentWeek} is locked.</strong> ` +
           `Finish every game in Week ${currentWeek - 1} before these games can be played.`;
@@ -94,13 +96,19 @@
   const _updateUI = window.updateUI;
   window.updateUI = function () {
     if (typeof _updateUI === "function") _updateUI();
-    if (!game || !L()) return;
-    L().fillTeamSlot(document.getElementById("away-logo-slot"), game.away);
-    L().fillTeamSlot(document.getElementById("home-logo-slot"), game.home);
+    if (!game) return;
+
+    if (L()) {
+      L().fillTeamSlot(document.getElementById("away-logo-slot"), game.away);
+      L().fillTeamSlot(document.getElementById("home-logo-slot"), game.home);
+    }
     const awayLab = document.getElementById("field-away-label");
     const homeLab = document.getElementById("field-home-label");
     if (awayLab && game.away) awayLab.textContent = game.away.name.toUpperCase();
     if (homeLab && game.home) homeLab.textContent = game.home.name.toUpperCase();
+
+    // Move ball + first-down line after every play
+    if (F()) F().update(game);
   };
 
   const _openTeamPage = window.openTeamPage;
@@ -131,6 +139,7 @@
   window.showScreen = function (id) {
     if (typeof _showScreen === "function") _showScreen(id);
     if (id === "playoffs-screen" && P()) P().renderPlayoffs();
+    if (id === "game-screen" && game && F()) F().update(game);
   };
 
   window.addEventListener("DOMContentLoaded", () => {
@@ -138,6 +147,7 @@
       L().startLoadingScreen();
       L().fillAppLogos();
     }
+    if (F()) F().ensureStructure();
     if (typeof window.renderWeeklyGames === "function") {
       window.renderWeeklyGames();
     }
