@@ -3,8 +3,12 @@
 // ============================================
 //
 // 17 games per team, 18 weeks, 1 explicit bye each.
-// Byes are assigned first (weeks 5–12, 4 teams/week),
-// then games are placed only in non-bye weeks.
+// Byes only in weeks 5–14 with this distribution:
+//   3 weeks × 2 teams on bye
+//   5 weeks × 4 teams on bye
+//   1 week  × 6 teams on bye
+//   (1 week in 5–14 has 0 byes)
+// Total: 3*2 + 5*4 + 1*6 = 32
 //
 // ============================================
 
@@ -109,32 +113,63 @@ function buildNFLMatchups() {
 }
 
 /**
- * Assign each team exactly one bye week.
- * Weeks 5–12 get 4 teams on bye each (8 × 4 = 32).
- * Returns: { [teamKey]: byeWeekNumber }
+ * Bye distribution (weeks 5–14 only):
+ *   Week  5: 2 teams
+ *   Week  6: 4 teams
+ *   Week  7: 4 teams
+ *   Week  8: 4 teams
+ *   Week  9: 6 teams
+ *   Week 10: 4 teams
+ *   Week 11: 4 teams
+ *   Week 12: 2 teams
+ *   Week 13: 2 teams
+ *   Week 14: 0 teams
+ *
+ * 3 weeks × 2 + 5 weeks × 4 + 1 week × 6 = 32 byes
  */
 function assignByeWeeks() {
-  const byeWeeks = {}; // teamKey -> week
-  const teamsOnByeByWeek = {}; // week -> [teamKey]
+  const byeWeeks = {};
+  const teamsOnByeByWeek = {};
 
-  // Bye window like the NFL: weeks 5 through 12
-  const byeWindow = [5, 6, 7, 8, 9, 10, 11, 12];
-  byeWindow.forEach(w => { teamsOnByeByWeek[w] = []; });
+  const byeSlotsByWeek = {
+    5: 2,
+    6: 4,
+    7: 4,
+    8: 4,
+    9: 6,
+    10: 4,
+    11: 4,
+    12: 2,
+    13: 2
+    // week 14: 0 byes
+  };
 
-  // Stable order so resets stay consistent
+  Object.keys(byeSlotsByWeek).forEach(w => {
+    teamsOnByeByWeek[Number(w)] = [];
+  });
+
   const ordered = TEAMS
     .slice()
     .sort((a, b) => teamName(a).localeCompare(teamName(b)));
 
+  // Build flat list of week slots: [5,5, 6,6,6,6, ...]
+  const weekQueue = [];
+  Object.keys(byeSlotsByWeek)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .forEach(week => {
+      const count = byeSlotsByWeek[week];
+      for (let i = 0; i < count; i++) weekQueue.push(week);
+    });
+
+  // 32 slots for 32 teams
   ordered.forEach((team, index) => {
-    const week = byeWindow[index % byeWindow.length];
+    const week = weekQueue[index];
     const key = teamKey(team);
     byeWeeks[key] = week;
     teamsOnByeByWeek[week].push(key);
   });
 
-  // Balance: round-robin already puts 4 per week (32/8).
-  // Verify counts — if not 4, redistribute simply.
   return { byeWeeks, teamsOnByeByWeek };
 }
 
@@ -147,12 +182,10 @@ function assignMatchupsToWeeks(matchups) {
     .sort((a, b) => a.order - b.order)
     .map(x => x.m);
 
-  // Weeks each team is already booked (starts with their bye blocked)
   const teamWeeks = {};
   TEAMS.forEach(t => {
     const key = teamKey(t);
     teamWeeks[key] = new Set();
-    // Block the bye week so no game can land there
     teamWeeks[key].add(byeWeeks[key]);
   });
 
@@ -160,14 +193,12 @@ function assignMatchupsToWeeks(matchups) {
   const remaining = pool.slice();
 
   function canPlay(teamK, week) {
-    // Bye week is already in the set, so this covers it
     if (teamWeeks[teamK].has(week)) return false;
-    // Max 17 games: set size includes 1 bye, so size >= 18 means 17 games + bye
+    // size includes 1 bye → max 18 means 17 games + bye
     if (teamWeeks[teamK].size >= 18) return false;
     return true;
   }
 
-  // Greedy multi-pass into non-bye weeks only
   for (let pass = 0; pass < 40 && remaining.length > 0; pass++) {
     for (let week = 1; week <= 18; week++) {
       for (let i = remaining.length - 1; i >= 0; i--) {
@@ -192,7 +223,6 @@ function assignMatchupsToWeeks(matchups) {
     }
   }
 
-  // Last-chance placement
   remaining.forEach(g => {
     const hk = teamKey(g.home);
     const ak = teamKey(g.away);
@@ -213,7 +243,6 @@ function assignMatchupsToWeeks(matchups) {
     }
   });
 
-  // Attach bye metadata for the UI
   result._byeWeeks = byeWeeks;
   result._teamsOnByeByWeek = teamsOnByeByWeek;
   return result;
@@ -222,12 +251,8 @@ function assignMatchupsToWeeks(matchups) {
 function buildFullNFLSchedule() {
   const matchups = buildNFLMatchups();
   const games = assignMatchupsToWeeks(matchups);
-
-  // Persist bye map alongside games (plain array + metadata object)
   const byeWeeks = games._byeWeeks || {};
   const teamsOnByeByWeek = games._teamsOnByeByWeek || {};
-
-  // Strip non-enumerable-ish helper fields; return clean structure
   const cleanGames = games.filter(g => g && g.week);
 
   return {
