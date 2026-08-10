@@ -331,12 +331,17 @@ function renderStandings() {
 }
 
 const AWARD_DEFINITIONS = [
-  { id: "mvp", title: "League MVP" }, { id: "offensive_poy", title: "Offensive Player of the Year" },
-  { id: "defensive_poy", title: "Defensive Player of the Year" }, { id: "rookie", title: "Rookie of the Year" },
-  { id: "coach", title: "Coach of the Year" }, { id: "comeback", title: "Comeback Player of the Year" },
-  { id: "most_improved", title: "Most Improved Player" }, { id: "best_qb", title: "Best Quarterback" },
-  { id: "best_rb", title: "Best Running Back" }, { id: "best_wr", title: "Best Wide Receiver" },
-  { id: "best_defense", title: "Best Defense" },
+  { id: "mvp", title: "League MVP", positions: ["QB", "RB", "WR", "TE"] },
+  { id: "offensive_poy", title: "Offensive Player of the Year", positions: ["QB", "RB", "WR", "TE", "OL"] },
+  { id: "defensive_poy", title: "Defensive Player of the Year", positions: ["DL", "LB", "CB", "S"] },
+  { id: "rookie", title: "Rookie of the Year", positions: ["QB", "RB", "WR", "TE", "DL", "LB", "CB", "S"] },
+  { id: "coach", title: "Coach of the Year", isTeamAward: true },
+  { id: "comeback", title: "Comeback Player of the Year", positions: ["QB", "RB", "WR", "TE"] },
+  { id: "most_improved", title: "Most Improved Player", positions: ["QB", "RB", "WR", "TE", "DL", "LB", "CB", "S"] },
+  { id: "best_qb", title: "Best Quarterback", positions: ["QB"] },
+  { id: "best_rb", title: "Best Running Back", positions: ["RB"] },
+  { id: "best_wr", title: "Best Wide Receiver", positions: ["WR"] },
+  { id: "best_defense", title: "Best Defense", isTeamAward: true },
 ];
 function createEmptyAwards() {
   const a = {};
@@ -350,6 +355,77 @@ function loadAwards() {
 }
 function saveAwards(a) { localStorage.setItem("mfl-awards", JSON.stringify(a)); }
 let awards = loadAwards();
+function getTopCandidatesForAward(awardDef) {
+  if (awardDef.isTeamAward) {
+    // For team awards, return top teams by record
+    const standings = typeof loadStandings === "function" ? loadStandings() : {};
+    const teamRecords = TEAMS.map(team => {
+      const s = standings[teamKey(team)] || { wins: 0, losses: 0, ties: 0 };
+      const games = (s.wins || 0) + (s.losses || 0) + (s.ties || 0);
+      const pct = games ? (s.wins + 0.5 * (s.ties || 0)) / games : 0;
+      return { team, winPct: pct, wins: s.wins || 0 };
+    }).sort((a, b) => b.winPct - a.winPct || b.wins - a.wins);
+
+    return teamRecords.slice(0, 5).map((t, i) => ({
+      rank: i + 1,
+      name: teamName(t.team),
+      teamKey: teamKey(t.team),
+      value: t.winPct.toFixed(3)
+    }));
+  }
+
+  // For player awards, get top players by position and stats
+  const candidates = [];
+  const positions = awardDef.positions || [];
+
+  TEAMS.forEach(team => {
+    const key = teamKey(team);
+    const roster = ROSTERS[key] || [];
+
+    roster.forEach(player => {
+      if (!positions.includes(player.position)) return;
+
+      // Get player stats for the season
+      const stats = window.PlayerSystem ? window.PlayerSystem.getStat(team, player) : {};
+      let score = player.rating || 70;
+
+      // Position-specific scoring
+      if (player.position === "QB") {
+        score += (stats.passYds || 0) / 1000;
+        score += (stats.passTd || 0) * 2;
+        score -= (stats.interceptions || 0) * 3;
+      } else if (player.position === "RB") {
+        score += (stats.rushYds || 0) / 500;
+        score += (stats.rushTd || 0) * 3;
+        score += (stats.recYds || 0) / 1000;
+      } else if (player.position === "WR") {
+        score += (stats.recYds || 0) / 500;
+        score += (stats.recTd || 0) * 3;
+        score += (stats.receptions || 0) / 20;
+      } else if (["DL", "LB", "CB", "S"].includes(player.position)) {
+        score += (stats.tackles || 0) / 10;
+        score += (stats.sacks || 0) * 5;
+        score += (stats.deflections || 0) / 5;
+      }
+
+      candidates.push({
+        name: player.name,
+        position: player.position,
+        team: teamName(team),
+        teamKey: key,
+        rating: player.rating,
+        score: Math.round(score),
+        stats
+      });
+    });
+  });
+
+  return candidates.sort((a, b) => b.score - a.score).slice(0, 5).map((c, i) => ({
+    rank: i + 1,
+    ...c
+  }));
+}
+
 function renderAwards() {
   const container = $("awards-list");
   if (!container) return;
@@ -363,17 +439,58 @@ function renderAwards() {
       if (def.id === "best_defense" || def.id === "coach") winnerText = team ? teamName(team) : current.player || "Unknown";
       else winnerText = `${current.player || "Unknown"}${team ? " – " + teamName(team) : ""}`;
     }
+
+    // Get top 5 candidates
+    const topCandidates = getTopCandidatesForAward(def);
+    const candidatesHTML = topCandidates.map(c => `
+      <div class="award-candidate" data-name="${c.name || c.teamKey}" data-team="${c.teamKey}">
+        <span class="candidate-rank">${c.rank}.</span>
+        <span class="candidate-name">${c.name || c.team}</span>
+        <span class="candidate-info">${c.position ? c.position + " • " : ""}${c.rating !== undefined ? "OVR " + c.rating : c.value}</span>
+      </div>
+    `).join("");
+
     const card = document.createElement("div");
     card.className = "award-card";
-    card.innerHTML = `<div class="award-title">${def.title}</div><div class="award-winner ${hasWinner ? "" : "empty"}">${winnerText}</div><div class="award-form"><input type="text" placeholder="Player name" value="${current.player || ""}" data-award="${def.id}" class="award-player-input"><select data-award="${def.id}" class="award-team-select"><option value="">– Select Team –</option>${TEAMS.map(t => `<option value="${teamKey(t)}" ${current.teamKey === teamKey(t) ? "selected" : ""}>${teamName(t)}</option>`).join("")}</select><button class="btn primary small award-save-btn" data-award="${def.id}">Save</button></div>`;
+    card.innerHTML = `
+      <div class="award-title">${def.title}</div>
+      <div class="award-winner ${hasWinner ? "" : "empty"}">${winnerText}</div>
+      <div class="award-candidates">
+        <h4>Top Candidates</h4>
+        <div class="candidates-list">${candidatesHTML}</div>
+      </div>
+      <div class="award-form">
+        <select data-award="${def.id}" class="award-candidate-select">
+          <option value="">– Select Winner –</option>
+          ${topCandidates.map(c => `<option value="${c.name || c.teamKey}" data-team="${c.teamKey}" ${current.player === (c.name || c.teamKey) ? "selected" : ""}>${c.rank}. ${c.name || c.team} ${c.position ? "(" + c.position + ")" : ""}</option>`).join("")}
+        </select>
+        <button class="btn primary small award-save-btn" data-award="${def.id}">Save</button>
+      </div>
+    `;
     container.appendChild(card);
   });
+
+  // Add click handlers for candidates
+  document.querySelectorAll(".award-candidate").forEach(candidate => {
+    candidate.addEventListener("click", () => {
+      const name = candidate.dataset.name;
+      const team = candidate.dataset.team;
+      const awardId = candidate.closest(".award-card").querySelector(".award-candidate-select").dataset.award;
+
+      const select = candidate.closest(".award-card").querySelector(`.award-candidate-select`);
+      select.value = name;
+    });
+  });
+
   document.querySelectorAll(".award-save-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.award;
+      const select = document.querySelector(`.award-candidate-select[data-award="${id}"]`);
+      const selectedOption = select.options[select.selectedIndex];
+
       awards[id] = {
-        player: document.querySelector(`.award-player-input[data-award="${id}"]`).value.trim(),
-        teamKey: document.querySelector(`.award-team-select[data-award="${id}"]`).value
+        player: select.value,
+        teamKey: selectedOption ? selectedOption.dataset.team : ""
       };
       saveAwards(awards);
       renderAwards();
@@ -387,6 +504,9 @@ function openTeamPage(teamIndex) {
   const rec = standings[key] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
   const sorted = getSortedStandings();
   const rank = sorted.findIndex(r => teamKey(r.team) === key) + 1;
+
+  // Get coach information
+  const coach = window.CoachSystem ? window.CoachSystem.getCoach(team) : null;
   $("team-page-name").textContent = teamName(team);
   const ratingEl = $("team-page-rating");
   if (ratingEl) ratingEl.textContent = `Overall: ${getTeamOverall(team)}`;
@@ -435,6 +555,45 @@ function openTeamPage(teamIndex) {
     tr.innerHTML = `<td class="rank">${i + 1}</td><td class="team-cell">${p.name}</td><td>${p.position}</td><td>${p.age}</td><td>${p.height}</td><td>${p.weight}</td><td class="${ratingClass}">${p.rating}</td>`;
     tbody.appendChild(tr);
   });
+
+  // Add coach information section
+  const teamPage = document.getElementById("team-page-screen");
+  let coachSection = document.getElementById("team-page-coach");
+  if (!coachSection) {
+    coachSection = document.createElement("div");
+    coachSection.id = "team-page-coach";
+    coachSection.className = "team-page-section";
+    const rosterSection = teamPage.querySelector('.team-page-section:nth-child(4)'); // After roster section
+    if (rosterSection) {
+      teamPage.insertBefore(coachSection, rosterSection);
+    } else {
+      teamPage.appendChild(coachSection);
+    }
+  }
+
+  if (coach) {
+    coachSection.innerHTML = `
+      <h3>Head Coach</h3>
+      <div class="coach-info">
+        <div class="coach-name">${coach.name}</div>
+        <div class="coach-stats">
+          <div class="coach-stat"><strong>Overall:</strong> <span class="${coach.overallRating >= 85 ? 'rating-high' : coach.overallRating >= 70 ? 'rating-mid' : 'rating-low'}">${coach.overallRating}</span></div>
+          <div class="coach-stat"><strong>Offense:</strong> ${coach.offenseRating}</div>
+          <div class="coach-stat"><strong>Defense:</strong> ${coach.defenseRating}</div>
+          <div class="coach-stat"><strong>Drafting:</strong> ${coach.draftingRating}</div>
+          <div class="coach-stat"><strong>Development:</strong> ${coach.developmentRating}</div>
+          <div class="coach-stat"><strong>Championships:</strong> ${coach.totalChampionships}</div>
+          <div class="coach-stat"><strong>Years with Team:</strong> ${coach.yearsWithTeam}</div>
+        </div>
+      </div>
+    `;
+  } else {
+    coachSection.innerHTML = `
+      <h3>Head Coach</h3>
+      <p class="empty-note">No coach information available</p>
+    `;
+  }
+
   showScreen("team-page-screen");
 }
 

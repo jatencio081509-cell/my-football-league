@@ -35,6 +35,14 @@ window.DraftSystem = {
     localStorage.setItem("mfl-draft-state", JSON.stringify(st));
   },
 
+  loadOffseasonHistory() {
+    try { return JSON.parse(localStorage.getItem("mfl-offseason-history") || "[]"); }
+    catch (e) { return []; }
+  },
+  saveOffseasonHistory(history) {
+    localStorage.setItem("mfl-offseason-history", JSON.stringify(history));
+  },
+
   /** Super Bowl / league championship finished? */
   championshipDone() {
     try {
@@ -134,7 +142,7 @@ window.DraftSystem = {
     return all.filter(p => p.draftYear === draftYear).sort((a, b) => b.rating - a.rating);
   },
 
-  /** Draft order: worst regular-season record first (simple). */
+  /** Draft order: worst regular-season record first (NFL-style with playoff teams at end). */
   buildDraftOrder() {
     const standings = typeof loadStandings === "function" ? loadStandings() : {};
     const rows = TEAMS.map(team => {
@@ -143,13 +151,32 @@ window.DraftSystem = {
       const pct = games ? (s.wins + 0.5 * (s.ties || 0)) / games : 0;
       return { team, wins: s.wins || 0, losses: s.losses || 0, ties: s.ties || 0, pct, pf: s.pf || 0, pa: s.pa || 0 };
     });
-    rows.sort((a, b) => {
-      if (a.pct !== b.pct) return a.pct - b.pct; // worst first
+
+    // Separate playoff and non-playoff teams (simplified - teams with .500+ record considered playoff teams)
+    const nonPlayoff = rows.filter(r => r.pct < 0.500);
+    const playoff = rows.filter(r => r.pct >= 0.500);
+
+    // Sort non-playoff teams by record (worst first)
+    nonPlayoff.sort((a, b) => {
+      if (a.pct !== b.pct) return a.pct - b.pct;
       const ad = a.pf - a.pa, bd = b.pf - b.pa;
       if (ad !== bd) return ad - bd;
       return a.wins - b.wins;
     });
-    return rows.map(r => r.team);
+
+    // Sort playoff teams by record (worst first among playoff teams)
+    playoff.sort((a, b) => {
+      if (a.pct !== b.pct) return a.pct - b.pct;
+      const ad = a.pf - a.pa, bd = b.pf - b.pa;
+      if (ad !== bd) return ad - bd;
+      return a.wins - b.wins;
+    });
+
+    // Combine: non-playoff teams first, then playoff teams
+    // In real NFL, Super Bowl loser picks 31st, winner 32nd
+    // For simplicity, we'll just put the best playoff team last
+    const allTeams = [...nonPlayoff, ...playoff];
+    return allTeams.map(r => r.team);
   },
 
   startDraft() {
@@ -307,17 +334,40 @@ window.DraftSystem = {
       list.forEach(p => {
         if (p.careerOver) {
           retired.push({ team, player: p, reason: p.careerEndReason || "Career-ending injury" });
+          // Track for Hall of Fame
+          if (window.HallOfFame) {
+            window.HallOfFame.retirePlayer(team, p, p.careerEndReason || "Career-ending injury");
+          }
           return;
         }
         if (Math.random() < this.retireChance(p)) {
           retired.push({ team, player: p, reason: "Retired" });
+          // Track for Hall of Fame
+          if (window.HallOfFame) {
+            window.HallOfFame.retirePlayer(team, p, "Retired");
+          }
           return;
         }
+        const oldRating = p.rating;
         p.age = (p.age || 24) + 1;
         p.experience = (p.experience || 0) + 1;
         // slight aging rating drift
-        if (p.age >= 33 && Math.random() < 0.4) p.rating = Math.max(50, p.rating - 1);
-        if (p.age >= 36 && Math.random() < 0.5) p.rating = Math.max(48, p.rating - 1);
+        if (p.age >= 33 && Math.random() < 0.4) {
+          p.rating = Math.max(50, p.rating - 1);
+          p.ratingChange = p.rating - oldRating;
+          p.oldRating = oldRating;
+        }
+        if (p.age >= 36 && Math.random() < 0.5) {
+          p.rating = Math.max(48, p.rating - 1);
+          p.ratingChange = p.rating - oldRating;
+          p.oldRating = oldRating;
+        }
+        // Young players can improve
+        if (p.age <= 25 && Math.random() < 0.3) {
+          p.rating = Math.min(99, p.rating + 1);
+          p.ratingChange = p.rating - oldRating;
+          p.oldRating = oldRating;
+        }
         kept.push(p);
       });
       ROSTERS[key] = kept;
@@ -338,6 +388,66 @@ window.DraftSystem = {
     });
     this.saveProspects(list);
     return list;
+  },
+
+  /** Generate offseason overview with draft picks, rating changes, retirements */
+  generateOffseasonOverview(draftState, retiredPlayers) {
+    const year = this.seasonYear();
+    const overview = {
+      year,
+      draftPicks: [],
+      ratingChanges: [],
+      retirements: retiredPlayers || [],
+      timestamp: Date.now()
+    };
+
+    // Top 10 draft picks
+    if (draftState && draftState.picks) {
+      overview.draftPicks = draftState.picks.slice(0, 10).map(pick => ({
+        overall: pick.overall,
+        round: pick.round,
+        team: pick.teamName,
+        player: pick.prospect.name,
+        position: pick.prospect.position,
+        rating: pick.prospect.rating,
+        school: pick.prospect.school
+      }));
+    }
+
+    // Rating changes across the league
+    TEAMS.forEach(team => {
+      const key = teamKey(team);
+      const roster = ROSTERS[key] || [];
+      roster.forEach(player => {
+        if (player.ratingChange) {
+          overview.ratingChanges.push({
+            team: teamName(team),
+            player: player.name,
+            position: player.position,
+            oldRating: player.oldRating || player.rating,
+            newRating: player.rating,
+            change: player.ratingChange
+          });
+        }
+      });
+    });
+
+    // Sort rating changes by absolute change
+    overview.ratingChanges.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+    overview.ratingChanges = overview.ratingChanges.slice(0, 20); // Top 20 most significant changes
+
+    return overview;
+  },
+
+  /** Save offseason overview to history */
+  saveOffseasonOverview(overview) {
+    const history = this.loadOffseasonHistory();
+    history.push(overview);
+    // Keep only last 10 years of history
+    if (history.length > 10) {
+      history.shift();
+    }
+    this.saveOffseasonHistory(history);
   }
 };
 

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draft System Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #0d1a24; color: #a8bdd0; }
+    button { padding: 8px 16px; margin: 4px; cursor: pointer; }
+    .btn { background: #1E7B44; color: white; border: none; border-radius: 4px; }
+    .btn.danger { background: #cc3333; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    th, td { border: 1px solid #1E7B44; padding: 8px; text-align: left; }
+    th { background: #122438; }
+    .rating-high { color: #4ade80; font-weight: bold; }
+    .rating-mid { color: #fbbf24; }
+    .rating-low { color: #f87171; }
+    .hidden { display: none; }
+    .status { color: #FDB813; font-weight: bold; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <h1>Draft System Test</h1>
+  
+  <div id="controls">
+    <button class="btn" onclick="generateProspects()">Generate Prospects</button>
+    <button class="btn danger" onclick="resetSeasonStats()">Reset Season Stats</button>
+    <button class="btn" onclick="unlockDraft()">Unlock Draft (Test)</button>
+    <button class="btn" onclick="generateCoaches()">Generate Coaches</button>
+    <button class="btn" onclick="showProspects()">Show Prospect Pipeline</button>
+    <button class="btn" onclick="showDraftBoard()">Show Draft Board</button>
+    <button class="btn" onclick="showDraftOrder()">Show Draft Order</button>
+    <button class="btn" onclick="showRetirement()">Show Retirement Rules</button>
+    <button class="btn" onclick="showHallOfFame()">Show Hall of Fame</button>
+  </div>
+
+  <div id="pipeline-view" class="hidden">
+    <h2>Prospect Pipeline</h2>
+    <div id="year-filters"></div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Name</th><th>Pos</th><th>Age</th><th>Level</th><th>School</th><th>Ht</th><th>Wt</th><th>Rating</th><th>Draft Year</th><th>Proj</th></tr>
+      </thead>
+      <tbody id="prospect-body"></tbody>
+    </table>
+  </div>
+
+  <div id="draft-board-view" class="hidden">
+    <h2>Draft Board</h2>
+    <div id="draft-lock-msg" class="status"></div>
+    <div id="draft-controls">
+      <button class="btn" id="start-draft-btn" onclick="startDraft()">Start Draft</button>
+      <button class="btn" id="next-pick-btn" onclick="nextPick()" disabled>Next Pick</button>
+      <button class="btn" id="sim-round-btn" onclick="simRound()" disabled>Sim Round</button>
+      <button class="btn danger" id="end-draft-btn" onclick="endDraft()" disabled>End of Draft</button>
+    </div>
+    <div id="draft-status" class="status"></div>
+    <div id="on-clock" class="status"></div>
+    <h3>Recent Picks</h3>
+    <div id="recent-picks"></div>
+    <h3>Best Available</h3>
+    <div id="best-available"></div>
+  </div>
+
+  <div id="retirement-view" class="hidden">
+    <h2>Retirement Rules</h2>
+    <ul>
+      <li><strong>Age 30–31:</strong> small chance (~4%)</li>
+      <li><strong>Age 32–33:</strong> moderate (~10%)</li>
+      <li><strong>Age 34–35:</strong> higher (~22%)</li>
+      <li><strong>Age 36–37:</strong> high (~45%)</li>
+      <li><strong>Age 38+:</strong> very high (~75%)</li>
+      <li><strong>Elite players (90+ OVR)</strong> stick around longer; low-rated vets leave sooner.</li>
+    </ul>
+    <h3>Career-ending injuries</h3>
+    <p>Yes. A small share of injuries (especially knee / concussion / big hits) can end a career immediately.</p>
+    <button class="btn" onclick="runOffseason()">Run Offseason</button>
+    <div id="offseason-log"></div>
+  </div>
+
+  <script src="diceEngine.js"></script>
+  <script src="playersAndStats.js"></script>
+  <script src="draftSystem.js"></script>
+  <script src="coachSystem.js"></script>
+  <script src="hallOfFame.js"></script>
+  <script src="draftUI.js"></script>
+  <script>
+    let currentFilterYear = null;
+
+    function resetSeasonStats() {
+      if (confirm('Clear all season player stats?')) {
+        localStorage.removeItem('mfl-player-stats');
+        if (confirm('Also clear injuries?')) {
+          localStorage.removeItem('mfl-injuries');
+        }
+        alert('Season stats reset.');
+      }
+    }
+
+    function generateProspects() {
+      if (window.DraftSystem) {
+        window.DraftSystem.generateProspects(true);
+        alert('Prospects generated!');
+      } else {
+        alert('DraftSystem not loaded');
+      }
+    }
+
+    function unlockDraft() {
+      if (window.DraftSystem) {
+        window.DraftSystem.markChampionshipDone();
+        alert('Draft unlocked for testing!');
+      } else {
+        alert('DraftSystem not loaded');
+      }
+    }
+
+    function generateCoaches() {
+      if (window.CoachSystem) {
+        window.CoachSystem.generateCoaches(true);
+        alert('Coaches generated!');
+      } else {
+        alert('CoachSystem not loaded');
+      }
+    }
+
+    function showProspects() {
+      document.getElementById('pipeline-view').classList.remove('hidden');
+      document.getElementById('draft-board-view').classList.add('hidden');
+      document.getElementById('retirement-view').classList.add('hidden');
+      renderPipeline();
+    }
+
+    function showDraftBoard() {
+      document.getElementById('pipeline-view').classList.add('hidden');
+      document.getElementById('draft-board-view').classList.remove('hidden');
+      document.getElementById('retirement-view').classList.add('hidden');
+      renderDraftBoard();
+    }
+
+    function showRetirement() {
+      document.getElementById('pipeline-view').classList.add('hidden');
+      document.getElementById('draft-board-view').classList.add('hidden');
+      document.getElementById('retirement-view').classList.remove('hidden');
+    }
+
+    function showDraftOrder() {
+      document.getElementById('pipeline-view').classList.add('hidden');
+      document.getElementById('draft-board-view').classList.add('hidden');
+      document.getElementById('retirement-view').classList.add('hidden');
+      alert('Draft Order view would be shown here. In the main app, this shows projected draft picks by round.');
+    }
+
+    function showHallOfFame() {
+      document.getElementById('pipeline-view').classList.add('hidden');
+      document.getElementById('draft-board-view').classList.add('hidden');
+      document.getElementById('retirement-view').classList.add('hidden');
+      alert('Hall of Fame view would be shown here. In the main app, this shows all inducted players.');
+    }
+
+    function renderPipeline() {
+      const DS = window.DraftSystem;
+      if (!DS) return;
+      
+      const all = DS.generateProspects(false);
+      const year = DS.seasonYear();
+      const years = [];
+      for (let y = year; y <= year + 6; y++) years.push(y);
+      
+      if (currentFilterYear == null) currentFilterYear = year;
+
+      const filters = document.getElementById('year-filters');
+      filters.innerHTML = years.map(y =>
+        `<button onclick="setFilterYear(${y})" class="btn" style="background: ${y === currentFilterYear ? '#FDB813' : '#1E7B44'}">${y}${y === year ? ' (this year)' : ''}</button>`
+      ).join('');
+
+      const body = document.getElementById('prospect-body');
+      const list = all.filter(p => p.draftYear === currentFilterYear).sort((a, b) => b.rating - a.rating);
+      body.innerHTML = list.slice(0, 50).map((p, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${p.name}</td>
+          <td>${p.position}</td>
+          <td>${p.age}</td>
+          <td>${p.level}</td>
+          <td>${p.school}</td>
+          <td>${p.height}</td>
+          <td>${p.weight}</td>
+          <td class="${p.rating >= 85 ? 'rating-high' : p.rating >= 70 ? 'rating-mid' : 'rating-low'}">${p.rating}</td>
+          <td>${p.draftYear}</td>
+          <td>R${p.projectedRound}</td>
+        </tr>`).join('') || '<tr><td colspan="11">No prospects</td></tr>';
+    }
+
+    function setFilterYear(year) {
+      currentFilterYear = year;
+      renderPipeline();
+    }
+
+    function renderDraftBoard() {
+      const DS = window.DraftSystem;
+      if (!DS) return;
+      
+      const year = DS.seasonYear();
+      const locked = !DS.championshipDone();
+      const msg = document.getElementById('draft-lock-msg');
+      msg.textContent = locked
+        ? `Draft unlocks after the League Championship. Current year: ${year}`
+        : `League Championship complete — ${year} Draft is unlocked.`;
+
+      let state = DS.getState();
+      const startBtn = document.getElementById('start-draft-btn');
+      const nextBtn = document.getElementById('next-pick-btn');
+      const simBtn = document.getElementById('sim-round-btn');
+      const endBtn = document.getElementById('end-draft-btn');
+
+      const canRun = !locked && state && !state.done;
+      startBtn.disabled = locked || (state && !state.done);
+      nextBtn.disabled = !canRun;
+      simBtn.disabled = !canRun;
+      endBtn.disabled = !canRun;
+
+      const status = document.getElementById('draft-status');
+      const onClock = document.getElementById('on-clock');
+      const recent = document.getElementById('recent-picks');
+      const best = document.getElementById('best-available');
+
+      if (!state) {
+        status.textContent = locked ? 'Waiting for championship.' : 'Ready to start the draft.';
+        onClock.textContent = '—';
+        recent.innerHTML = '';
+        best.innerHTML = DS.prospectsForYear(year).slice(0, 15).map((p, i) =>
+          `<div>${i + 1}. ${p.name} (${p.position}) · ${p.rating} · ${p.school}</div>`
+        ).join('');
+        return;
+      }
+
+      status.textContent = state.done
+        ? `${state.year} Draft complete — ${state.picks.length} picks made.`
+        : `Round ${state.round}, Pick ${state.pickInRound + 1} · Overall ${state.overall + 1}`;
+
+      const team = DS.currentTeam(state);
+      onClock.textContent = state.done ? 'Draft over' : (team ? `${team.name} is on the clock` : '—');
+
+      recent.innerHTML = state.picks.slice(-10).reverse().map(pk =>
+        `<div><strong>${pk.overall}.</strong> ${pk.teamName} select <strong>${pk.prospect.name}</strong> (${pk.prospect.position}) — ${pk.prospect.rating}</div>`
+      ).join('') || '<p>No picks yet</p>';
+
+      best.innerHTML = state.remaining.slice(0, 15).map((p, i) =>
+        `<div>${i + 1}. ${p.name} (${p.position}) · ${p.rating}</div>`
+      ).join('');
+    }
+
+    function startDraft() {
+      const DS = window.DraftSystem;
+      if (!DS) return;
+      const st = DS.startDraft();
+      if (st) renderDraftBoard();
+    }
+
+    function nextPick() {
+      const DS = window.DraftSystem;
+      if (!DS) return;
+      let st = DS.getState();
+      if (!st) return;
+      DS.nextPick(st);
+      renderDraftBoard();
+    }
+
+    function simRound() {
+      const DS = window.DraftSystem;
+      if (!DS) return;
+      let st = DS.getState();
+      if (!st) return;
+      DS.simRound(st);
+      renderDraftBoard();
+    }
+
+    function endDraft() {
+      const DS = window.DraftSystem;
+      if (!DS) return;
+      let st = DS.getState();
+      if (!st) return;
+      DS.endDraft(st);
+      renderDraftBoard();
+      const retired = DS.processOffseason();
+      DS.ageProspects();
+      DS.clearChampionshipFlag();
+      alert(`Draft complete. ${retired.length} players retired or left due to career-ending injuries.`);
+    }
+
+    function runOffseason() {
+      const DS = window.DraftSystem;
+      if (!DS) return;
+      if (!confirm('Process retirements and age prospects now?')) return;
+      const retired = DS.processOffseason();
+      DS.ageProspects();
+      const log = document.getElementById('offseason-log');
+      log.innerHTML = retired.map(r => {
+        const teamName = typeof r.team === 'object' ? (r.team.name || r.team.city + ' ' + r.team.mascot) : r.team;
+        return `<div>${teamName} — ${r.player.name} (${r.player.position}, age ${r.player.age}) · ${r.reason}</div>`;
+      }).join('') || '<p>No retirements.</p>';
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.DraftSystem) {
+        window.DraftSystem.generateProspects(false);
+      }
+    });
+  </script>
+</body>
+</html>

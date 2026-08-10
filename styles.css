@@ -436,6 +436,95 @@ h2 {
   text-transform: uppercase;
   letter-spacing: 1.2px;
 }
+.award-candidates {
+  margin: 8px 0;
+  padding: 10px;
+  background: rgba(30, 123, 68, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(30, 123, 68, 0.3);
+}
+.award-candidates h4 {
+  color: #a8bdd0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: 0 0 8px 0;
+  letter-spacing: 0.5px;
+}
+.candidates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.award-candidate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 12px;
+  color: #a8bdd0;
+}
+.award-candidate:hover {
+  background: rgba(253, 184, 19, 0.1);
+}
+.candidate-rank {
+  color: #FDB813;
+  font-weight: 800;
+  min-width: 20px;
+}
+.candidate-name {
+  font-weight: 600;
+  flex: 1;
+}
+.candidate-info {
+  color: #6b8499;
+  font-size: 11px;
+}
+.award-candidate-select {
+  background: #0d1a24;
+  border: 1px solid #6b8499;
+  color: #a8bdd0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+/* ========== COACH INFO ========== */
+.coach-info {
+  background: #122438;
+  border: 1px solid #1E7B44;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+}
+.coach-name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #FDB813;
+  margin-bottom: 10px;
+}
+.coach-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #a8bdd0;
+}
+.coach-stat {
+  background: rgba(30, 123, 68, 0.1);
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.coach-stat strong {
+  color: #FDB813;
+  font-weight: 700;
+}
+
 .award-winner {
   flex: 1;
   display: flex;
