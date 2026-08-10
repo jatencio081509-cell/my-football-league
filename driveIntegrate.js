@@ -1,4 +1,5 @@
 // Drive mode: dice → queue → step through plays (Next / Auto)
+// Outcome + play count are hidden until the drive finishes.
 (function () {
   function DE() { return window.DriveEngine; }
   function F() { return window.FieldVisual; }
@@ -10,6 +11,7 @@
   let autoTimer = null;
   let driveActive = false;
   let injuriesTickedForGame = false;
+  let pendingOutcome = null;
 
   const _createNewGame = window.createNewGame;
   window.createNewGame = function (home, away, scheduledGame) {
@@ -43,9 +45,10 @@
       if (resolveBtn) resolveBtn.disabled = true;
       if (nextBtn) { nextBtn.disabled = false; nextBtn.classList.remove("hidden"); }
       if (autoBtn) { autoBtn.disabled = false; autoBtn.classList.remove("hidden"); }
+      // Never reveal how many plays remain
       if (status) status.textContent = autoMode
-        ? `Auto-playing… (${stepIndex + 1}/${pendingSteps.length})`
-        : `Play ${stepIndex + 1} of ${pendingSteps.length} — press Next Play`;
+        ? "Auto-playing…"
+        : "Press Next Play for the next snap";
     } else {
       if (diceBox) diceBox.style.opacity = "1";
       if (resolveBtn) resolveBtn.disabled = false;
@@ -65,11 +68,25 @@
     stepIndex = 0;
     driveActive = false;
     autoMode = false;
+    pendingOutcome = null;
     if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
     setDriveControls("idle");
   }
 
+  function announceOutcome() {
+    if (!pendingOutcome || !game) return;
+    const title = DE() && DE().outcomeTitle
+      ? DE().outcomeTitle(pendingOutcome.id)
+      : "DRIVE COMPLETE";
+    game.playLog.push("——— " + title + " ———");
+    if (pendingOutcome.oRating != null) {
+      game.playLog.push(`Matchup: Off ${pendingOutcome.oRating} vs Def ${pendingOutcome.dRating}`);
+    }
+    pendingOutcome = null;
+  }
+
   function clearRemainingSteps() {
+    announceOutcome();
     pendingSteps = [];
     stepIndex = 0;
     driveActive = false;
@@ -99,7 +116,6 @@
       game.down = 1;
       game.distance = 10;
       markDriveStart();
-      // One-level only — no chain TDs
       return;
     }
     const spot = Math.min(40, Math.max(15, kr.returnYards || 25));
@@ -167,7 +183,6 @@
   function checkInjuries(step) {
     if (!PS() || !game || !step) return;
     const candidates = [];
-
     if (step.statPatches) {
       step.statPatches.forEach(sp => {
         if (sp && sp.team && sp.player) candidates.push({ team: sp.team, player: sp.player });
@@ -184,7 +199,6 @@
         candidates.push({ team, player: p });
       });
     }
-
     const seen = new Set();
     candidates.forEach(({ team, player }) => {
       const id = player.name + "@" + teamKey(team);
@@ -203,29 +217,25 @@
     injuriesTickedForGame = true;
   }
 
-  /** INT / fumble / punt with return yards or return TD */
   function applyReturnSpecial(step) {
     const s = step.special;
     if (s === "int" || s === "int_td") {
-      const intSpot = game.yardLine;
       if (s === "int_td") {
         if (game.possession === "home") game.awayScore += 7;
         else game.homeScore += 7;
         game.playLog.push("*** PICK-SIX — TOUCHDOWN (+7) ***");
-        // Original offense receives kickoff
         doKickReturn();
         return true;
       }
       switchPossession();
       flipField();
-      const base = game.yardLine; // ~100 - intSpot
+      const base = game.yardLine;
       game.yardLine = Math.min(99, Math.max(1, base + (step.returnYards || 0)));
       game.down = 1;
       game.distance = 10;
       markDriveStart();
       return true;
     }
-
     if (s === "fumble" || s === "fumble_td") {
       if (s === "fumble_td") {
         if (game.possession === "home") game.awayScore += 7;
@@ -243,7 +253,6 @@
       markDriveStart();
       return true;
     }
-
     if (s === "punt" || s === "punt_td") {
       const afterKick = game.yardLine + (step.yards || 40);
       if (s === "punt_td") {
@@ -264,7 +273,6 @@
       markDriveStart();
       return true;
     }
-
     return false;
   }
 
@@ -278,7 +286,6 @@
       game.down = 4;
     }
 
-    // Returns / turnovers with returns
     if (step.special === "int" || step.special === "int_td" ||
         step.special === "fumble" || step.special === "fumble_td" ||
         step.special === "punt" || step.special === "punt_td") {
@@ -331,10 +338,12 @@
   }
 
   function finishDrive() {
+    announceOutcome();
     driveActive = false;
     pendingSteps = [];
     stepIndex = 0;
     setDriveControls("idle");
+    if (typeof updateUI === "function") updateUI();
   }
 
   function advanceOnePlay() {
@@ -389,13 +398,10 @@
     }
 
     const outcome = DE().resolveDriveFromDice(roll, game);
-    const title = DE().outcomeTitle(outcome.id);
-    let header = "——— " + title + " ——-";
-    if (outcome.oRating != null) {
-      header += `  (Off ${outcome.oRating} vs Def ${outcome.dRating})`;
-    }
-    game.playLog.push(header);
-    if (window.formatDiceRoll) game.playLog.push("Dice: " + formatDiceRoll(roll));
+    // Keep outcome private until the last play finishes
+    pendingOutcome = outcome;
+    game.playLog.push("——— Drive underway ———");
+    game.playLog.push("Dice rolled");
 
     pendingSteps = DE().generatePlays(game, outcome);
     stepIndex = 0;
@@ -505,7 +511,7 @@
     const instr = document.querySelector(".dice-instructions");
     if (instr) {
       instr.textContent =
-        "Roll once per drive. Then use Next Play to step through, or Auto Play to run them out. Clock still ticks per play type.";
+        "Roll once per drive. Use Next Play (or Auto Play) to step through snaps. The drive result is revealed only when it ends.";
     }
 
     if (!document.getElementById("drive-ctrl-style")) {
