@@ -1,5 +1,6 @@
 // Drive mode: dice → queue → step through plays (Next / Auto)
-// Outcome + play count are hidden until the drive finishes.
+// Outcome + play count hidden until drive ends.
+// 4th down: FG/punt only — never fake turnover when kick is queued.
 (function () {
   function DE() { return window.DriveEngine; }
   function F() { return window.FieldVisual; }
@@ -12,6 +13,11 @@
   let driveActive = false;
   let injuriesTickedForGame = false;
   let pendingOutcome = null;
+
+  // Expose for debugging / external patches
+  window.__mflDriveState = function () {
+    return { pendingSteps, stepIndex, driveActive, pendingOutcome };
+  };
 
   const _createNewGame = window.createNewGame;
   window.createNewGame = function (home, away, scheduledGame) {
@@ -45,7 +51,6 @@
       if (resolveBtn) resolveBtn.disabled = true;
       if (nextBtn) { nextBtn.disabled = false; nextBtn.classList.remove("hidden"); }
       if (autoBtn) { autoBtn.disabled = false; autoBtn.classList.remove("hidden"); }
-      // Never reveal how many plays remain
       if (status) status.textContent = autoMode
         ? "Auto-playing…"
         : "Press Next Play for the next snap";
@@ -289,6 +294,13 @@
     if (step.special === "int" || step.special === "int_td" ||
         step.special === "fumble" || step.special === "fumble_td" ||
         step.special === "punt" || step.special === "punt_td") {
+      if (step.forcedOutcome) {
+        pendingOutcome = {
+          id: step.forcedOutcome,
+          oRating: pendingOutcome && pendingOutcome.oRating,
+          dRating: pendingOutcome && pendingOutcome.dRating
+        };
+      }
       game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
       checkInjuries(step);
       applyReturnSpecial(step);
@@ -308,9 +320,24 @@
           game.distance = 10;
           if (game.yardLine >= 90) game.distance = Math.max(1, 100 - game.yardLine);
         } else if (game.down >= 4) {
+          const upcoming = pendingSteps.slice(stepIndex + 1);
+          const hasKick = upcoming.some(s => s && (
+            s.special === "fg" || s.special === "miss_fg" ||
+            s.special === "punt" || s.special === "punt_td"
+          ));
+          if (hasKick) {
+            applyTime(Math.min(step.time || 6, 8));
+            updateUI();
+            return;
+          }
           game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
           game.playLog.push("4th down — short of the marker. Turnover on downs");
           checkInjuries(step);
+          pendingOutcome = {
+            id: "turnover_downs",
+            oRating: pendingOutcome && pendingOutcome.oRating,
+            dRating: pendingOutcome && pendingOutcome.dRating
+          };
           applySpecial("downs");
           applyTime(step.time);
           clearRemainingSteps();
@@ -331,6 +358,28 @@
     checkInjuries(step);
 
     if (step.special === "td") game.yardLine = 100;
+
+    if (step.forcedOutcome) {
+      pendingOutcome = {
+        id: step.forcedOutcome,
+        oRating: pendingOutcome && pendingOutcome.oRating,
+        dRating: pendingOutcome && pendingOutcome.dRating
+      };
+    }
+    if (step.special === "fg") {
+      pendingOutcome = {
+        id: "field_goal",
+        oRating: pendingOutcome && pendingOutcome.oRating,
+        dRating: pendingOutcome && pendingOutcome.dRating
+      };
+    }
+    if (step.special === "miss_fg") {
+      pendingOutcome = {
+        id: "missed_fg",
+        oRating: pendingOutcome && pendingOutcome.oRating,
+        dRating: pendingOutcome && pendingOutcome.dRating
+      };
+    }
 
     applySpecial(step.special);
     applyTime(step.time);
@@ -398,7 +447,6 @@
     }
 
     const outcome = DE().resolveDriveFromDice(roll, game);
-    // Keep outcome private until the last play finishes
     pendingOutcome = outcome;
     game.playLog.push("——— Drive underway ———");
     game.playLog.push("Dice rolled");
