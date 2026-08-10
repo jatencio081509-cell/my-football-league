@@ -22,6 +22,27 @@
     return el;
   }
 
+  /** True for real on-field play lines (not meta / headers). */
+  function isRealPlayLine(line) {
+    if (!line || typeof line !== "string") return false;
+    const t = line.trim();
+    if (!t) return false;
+    // Headers / meta — never "last play"
+    if (/^———/.test(t)) return false;
+    if (/^---/.test(t)) return false;
+    if (/^Matchup:/i.test(t)) return false;
+    if (/^Dice(\s+rolled|:)/i.test(t)) return false;
+    if (/^Drive underway/i.test(t)) return false;
+    if (/^Kickoff:/i.test(t) && /Weather note/i.test(t)) return false;
+    if (/^Weather note:/i.test(t)) return false;
+    if (/^Game started:/i.test(t)) return false;
+    // Scoring banners are outcome markers; prefer the actual play description
+    // but if only banner remains, still skip Matchup. Allow *** as secondary.
+    // User asked for most recent PLAY — skip pure result banners when a play exists.
+    if (/^\*\*\*/.test(t)) return false;
+    return true;
+  }
+
   function refreshLatestPlay() {
     const el = ensureLatestPlayEl();
     if (!el) return;
@@ -32,15 +53,15 @@
       textEl.textContent = "—";
       return;
     }
-    const skip = /^(———|Dice:|\*\*\*|--- End)/;
     let latest = null;
     for (let i = g.playLog.length - 1; i >= 0; i--) {
       const line = g.playLog[i];
-      if (!line || skip.test(line)) continue;
+      if (!isRealPlayLine(line)) continue;
+      // Strip trailing clock marker noise is fine to keep
       latest = line;
       break;
     }
-    textEl.textContent = latest || g.playLog[g.playLog.length - 1] || "—";
+    textEl.textContent = latest || "—";
   }
 
   function hookUpdateUI() {
@@ -142,6 +163,7 @@
     });
 
     players.forEach((p, i) => {
+      if (window.PlayerBio) window.PlayerBio.enrich(p, team);
       let ratingClass = "rating-low";
       if (p.rating >= 85) ratingClass = "rating-high";
       else if (p.rating >= 70) ratingClass = "rating-mid";
@@ -152,17 +174,26 @@
         ? ` <span class="role-out" title="${inj.type}">OUT</span> <span class="injury-inline">${inj.type} · ${inj.gamesLeft}g</span>`
         : "";
       const stats = formatStats(p, team);
+      const college = p.college ? ` <span class="roster-college">${p.college}</span>` : "";
       const tr = document.createElement("tr");
       if (inj) tr.classList.add("injured-row");
       tr.innerHTML =
         `<td class="rank">${i + 1}</td>` +
-        `<td class="team-cell">${p.name} <span class="${roleClass}">${role}</span>${outBadge}</td>` +
+        `<td class="team-cell player-link" data-player-name="${p.name.replace(/"/g, """)}">${p.name} <span class="${roleClass}">${role}</span>${outBadge}${college}</td>` +
         `<td>${p.position}</td>` +
         `<td>${p.age}</td>` +
         `<td>${p.height}</td>` +
         `<td>${p.weight}</td>` +
         `<td class="${ratingClass}">${p.rating}</td>`;
       tbody.appendChild(tr);
+      const nameCell = tr.querySelector(".team-cell");
+      if (nameCell) {
+        nameCell.style.cursor = "pointer";
+        nameCell.title = "View bio";
+        nameCell.addEventListener("click", () => {
+          if (window.PlayerBio) window.PlayerBio.open(team, p, "team-page-screen");
+        });
+      }
       if (stats) {
         const tr2 = document.createElement("tr");
         tr2.className = "stats-row";
@@ -239,6 +270,13 @@
         font-size: 0.95rem;
         font-weight: 600;
         line-height: 1.35;
+      }
+      .roster-college {
+        display: block;
+        font-size: 0.72rem;
+        color: #6b8499;
+        font-weight: 600;
+        margin-top: 2px;
       }
       .role-starter {
         display: inline-block;
