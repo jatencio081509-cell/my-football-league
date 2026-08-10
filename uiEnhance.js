@@ -2,6 +2,13 @@
 (function () {
   function PS() { return window.PlayerSystem; }
 
+  function getGame() {
+    try {
+      if (typeof game !== "undefined" && game) return game;
+    } catch (e) {}
+    return window.game || null;
+  }
+
   function ensureLatestPlayEl() {
     let el = document.getElementById("latest-play");
     if (el) return el;
@@ -20,32 +27,32 @@
     if (!el) return;
     const textEl = el.querySelector(".latest-play-text");
     if (!textEl) return;
-    if (!window.game || !game.playLog || !game.playLog.length) {
+    const g = getGame();
+    if (!g || !g.playLog || !g.playLog.length) {
       textEl.textContent = "—";
       return;
     }
-    // Prefer real plays over separators / dice lines
     const skip = /^(———|Dice:|\*\*\*|--- End)/;
     let latest = null;
-    for (let i = game.playLog.length - 1; i >= 0; i--) {
-      const line = game.playLog[i];
+    for (let i = g.playLog.length - 1; i >= 0; i--) {
+      const line = g.playLog[i];
       if (!line || skip.test(line)) continue;
       latest = line;
       break;
     }
-    textEl.textContent = latest || game.playLog[game.playLog.length - 1] || "—";
+    textEl.textContent = latest || g.playLog[g.playLog.length - 1] || "—";
   }
 
-  // Hook updateUI so latest play stays in sync
   function hookUpdateUI() {
-    if (window.__mflLatestPlayHooked) return;
     const prev = window.updateUI;
     if (typeof prev !== "function") return;
-    window.__mflLatestPlayHooked = true;
-    window.updateUI = function () {
+    if (prev.__mflLatestPlay) return;
+    function wrapped() {
       prev.apply(this, arguments);
       refreshLatestPlay();
-    };
+    }
+    wrapped.__mflLatestPlay = true;
+    window.updateUI = wrapped;
   }
 
   function formatStats(p, team) {
@@ -201,9 +208,8 @@
   window.addEventListener("DOMContentLoaded", () => {
     ensureLatestPlayEl();
     hookUpdateUI();
-    // Re-hook after other scripts may wrap updateUI
     setTimeout(hookUpdateUI, 0);
-    setTimeout(hookUpdateUI, 100);
+    setTimeout(hookUpdateUI, 150);
 
     if (document.getElementById("ui-enhance-style")) return;
     const s = document.createElement("style");
