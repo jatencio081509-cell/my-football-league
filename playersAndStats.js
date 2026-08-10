@@ -25,7 +25,9 @@ window.PlayerSystem = {
       rushYds: 0, rushTd: 0,
       recYds: 0, recTd: 0, receptions: 0,
       tackles: 0, sacks: 0, deflections: 0,
-      fgMade: 0, fgMiss: 0, punts: 0, puntYds: 0
+      fgMade: 0, fgMiss: 0, punts: 0, puntYds: 0,
+      returnYds: 0, returnTd: 0, fumblesLost: 0, fumRecoveries: 0,
+      kickRetYds: 0, puntRetYds: 0
     };
   },
 
@@ -78,7 +80,6 @@ window.PlayerSystem = {
     return this.loadInjuries()[this.playerId(team, player)] || null;
   },
 
-  /** Injure a player for 1–N games. Returns injury record. */
   injure(team, player) {
     if (!team || !player) return null;
     const type = this.INJURY_TYPES[Math.floor(Math.random() * this.INJURY_TYPES.length)];
@@ -97,7 +98,6 @@ window.PlayerSystem = {
     return rec;
   },
 
-  /** After a team's game is completed, tick down their injuries by 1. */
   tickInjuriesForTeam(team) {
     if (!team) return;
     const all = this.loadInjuries();
@@ -134,7 +134,6 @@ window.PlayerSystem = {
     });
   },
 
-  /** All players at positions, sorted starter-first then rating. */
   depthList(team, positions) {
     const list = [];
     const roster = ROSTERS[teamKey(team)] || [];
@@ -142,7 +141,8 @@ window.PlayerSystem = {
       roster.filter(p => p.position === pos).forEach(p => list.push(p));
     });
     list.sort((a, b) => {
-      if (a.starter !== b.starter) return a.starter ? -1 : 1;
+      if (!!a.starter !== !!b.starter) return a.starter ? -1 : 1;
+      if ((a.depth || 99) !== (b.depth || 99)) return (a.depth || 99) - (b.depth || 99);
       return b.rating - a.rating;
     });
     return list;
@@ -153,33 +153,48 @@ window.PlayerSystem = {
   },
 
   /**
-   * Pick who actually plays: first healthy player in depth chart.
-   * Prefer starters; fall back to bench if starters are hurt.
+   * Who plays this snap:
+   * 1) Healthy starters only (random among starter slots for multi-starter positions)
+   * 2) If all starters at that position are injured → healthy bench by depth
+   * 3) Last resort → anyone on the list
+   * Never mixes healthy starters with healthy bench on the same role pick.
    */
   pickAvailable(team, positions) {
     const list = this.depthList(team, positions);
-    const healthy = list.filter(p => !this.isInjured(team, p));
-    const pool = healthy.length ? healthy : list; // last resort: use injured if everyone hurt
-    if (!pool.length) {
-      return { name: "Unknown", position: positions[0], rating: 70, starter: true };
+    if (!list.length) {
+      return { name: "Unknown", position: positions[0], rating: 70, starter: true, depth: 1 };
     }
-    // Weighted among healthy, still favoring higher rating / starters
-    const weights = pool.map(p => Math.max(1, (p.starter ? 25 : 0) + p.rating - 40));
-    const sum = weights.reduce((a, b) => a + b, 0);
-    let r = Math.random() * sum;
-    for (let i = 0; i < pool.length; i++) {
-      r -= weights[i];
-      if (r <= 0) return pool[i];
+
+    const healthyStarters = list.filter(p => p.starter && !this.isInjured(team, p));
+    if (healthyStarters.length) {
+      // Multi-starter groups (RB2, WR3, etc.): pick among healthy starters only
+      if (healthyStarters.length === 1) return healthyStarters[0];
+      // Slight rating weight among healthy starters only
+      const weights = healthyStarters.map(p => Math.max(1, p.rating - 50));
+      const sum = weights.reduce((a, b) => a + b, 0);
+      let r = Math.random() * sum;
+      for (let i = 0; i < healthyStarters.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return healthyStarters[i];
+      }
+      return healthyStarters[0];
     }
-    return pool[0];
+
+    // Starters all out → next healthy on depth chart (bench)
+    const healthyBench = list.filter(p => !p.starter && !this.isInjured(team, p));
+    if (healthyBench.length) {
+      // Strict depth order for first healthy backup (not random mix with starters)
+      return healthyBench[0];
+    }
+
+    // Everyone hurt — use top of chart anyway
+    return list[0];
   },
 
-  // Back-compat alias used by drive engine
   pickStarter(team, positions) {
     return this.pickAvailable(team, positions);
   },
 
-  /** Offense OVR using currently available (non-injured preferred) skill players. */
   offenseOverall(team) {
     const pos = ["QB", "RB", "WR", "TE", "OL"];
     const units = [];
@@ -204,14 +219,9 @@ window.PlayerSystem = {
     return Math.round(units.reduce((s, p) => s + p.rating, 0) / units.length);
   },
 
-  /**
-   * Chance to injure a player involved in a play.
-   * Higher on sacks, big hits, runs between tackles.
-   * Returns injury log line or null.
-   */
   maybeInjureFromPlay(team, player, playType) {
     if (!team || !player || this.isInjured(team, player)) return null;
-    let chance = 0.012; // base ~1.2%
+    let chance = 0.012;
     if (playType === "sack" || playType === "safety") chance = 0.04;
     else if (playType === "run_big" || playType === "touchdown_run") chance = 0.025;
     else if (playType === "run_short" || playType === "run_medium" || playType === "stuff") chance = 0.018;
