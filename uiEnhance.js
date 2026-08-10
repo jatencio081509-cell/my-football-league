@@ -17,7 +17,7 @@
     el = document.createElement("div");
     el.id = "latest-play";
     el.className = "latest-play";
-    el.innerHTML = '<span class="latest-play-label">LAST PLAY</span><span class="latest-play-text">—</span>';
+    el.innerHTML = '<span class="latest-play-label">LAST PLAY</span><span class="latest-play-text">—</span><div id="latest-injury" class="latest-injury"></div>';
     poss.parentNode.insertBefore(el, poss.nextSibling);
     return el;
   }
@@ -42,10 +42,12 @@
     const el = ensureLatestPlayEl();
     if (!el) return;
     const textEl = el.querySelector(".latest-play-text");
+    const injuryEl = el.querySelector("#latest-injury");
     if (!textEl) return;
     const g = getGame();
     if (!g || !g.playLog || !g.playLog.length) {
       textEl.textContent = "—";
+      if (injuryEl) injuryEl.textContent = "";
       return;
     }
     let latest = null;
@@ -56,6 +58,13 @@
       break;
     }
     textEl.textContent = latest || "—";
+    
+    // Display latest injury if available
+    if (injuryEl && g.injuryLog && g.injuryLog.length > 0) {
+      injuryEl.textContent = g.injuryLog[g.injuryLog.length - 1];
+    } else if (injuryEl) {
+      injuryEl.textContent = "";
+    }
   }
 
   function hookUpdateUI() {
@@ -76,24 +85,31 @@
     const bits = [];
     if (p.position === "QB") {
       if (s.passYds || s.passTd || s.interceptions) {
-        bits.push(s.passYds + ' pass yds, ' + s.passTd + ' TD, ' + s.interceptions + ' INT');
+        const rate = s.passAttempts > 0 ? s.passCompletions + '/' + s.passAttempts : '0/0';
+        bits.push(rate + ' · ' + s.passYds + ' yds (pass) · ' + s.passTd + ' TD · ' + s.interceptions + ' INT');
+      }
+      if (s.sacksTaken) {
+        bits.push(s.sacksTaken + ' sacked');
+      }
+      if (s.rushYds || s.rushTd) {
+        bits.push(s.rushYds + ' yds (rush) · ' + s.rushTd + ' TD');
       }
     } else if (p.position === "RB") {
       if (s.rushYds || s.rushTd || s.recYds) {
-        bits.push(s.rushYds + ' rush, ' + s.rushTd + ' TD, ' + s.recYds + ' rec yds');
+        bits.push(s.rushYds + ' yds (rush) · ' + s.rushTd + ' TD · ' + s.recYds + ' yds (rec)');
       }
     } else if (p.position === "WR" || p.position === "TE") {
       if (s.recYds || s.recTd || s.receptions) {
-        bits.push(s.receptions + ' rec, ' + s.recYds + ' yds, ' + s.recTd + ' TD');
+        bits.push(s.receptions + ' rec · ' + s.recYds + ' yds · ' + s.recTd + ' TD');
       }
     } else if (["DL", "LB", "CB", "S"].includes(p.position)) {
       if (s.tackles || s.sacks || s.interceptions) {
-        bits.push(s.tackles + ' tkl, ' + s.sacks + ' sk, ' + s.interceptions + ' INT');
+        bits.push(s.tackles + ' tkl · ' + s.sacks + ' sk · ' + s.interceptions + ' INT');
       }
     } else if (p.position === "K") {
       if (s.fgMade || s.fgMiss) bits.push(s.fgMade + '/' + (s.fgMade + s.fgMiss) + ' FG');
     } else if (p.position === "P") {
-      if (s.punts) bits.push(s.punts + ' punts, ' + s.puntYds + ' yds');
+      if (s.punts) bits.push(s.punts + ' punts · ' + s.puntYds + ' yds');
     }
     return bits.join(" · ");
   }
@@ -256,5 +272,11 @@
   window.addEventListener("DOMContentLoaded", () => {
     hookUpdateUI();
     setTimeout(hookUpdateUI, 100);
+
+    if (document.getElementById("ui-enhance-style")) return;
+    const s = document.createElement("style");
+    s.id = "ui-enhance-style";
+    s.textContent = '.latest-play { margin: 8px 0 14px; padding: 12px 16px; background: linear-gradient(135deg, #0d1a24, #122438); border: 1px solid var(--field-green, #1E7B44); border-left: 4px solid var(--gold, #FDB813); border-radius: 10px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.3); } .latest-play-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 1.5px; color: var(--gold, #FDB813); flex-shrink: 0; text-transform: uppercase; } .latest-play-text { color: #e8f1f8; font-size: 0.95rem; font-weight: 600; line-height: 1.4; flex-grow: 1; } .roster-college { display: block; font-size: 0.72rem; color: #6b8499; font-weight: 600; margin-top: 2px; } .role-starter { display: inline-block; margin-left: 6px; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.5px; color: #122438; background: #FDB813; padding: 2px 8px; border-radius: 4px; vertical-align: middle; } .role-bench { display: inline-block; margin-left: 6px; font-size: 0.65rem; font-weight: 700; color: #a8bdd0; border: 1px solid #6b8499; padding: 2px 8px; border-radius: 4px; vertical-align: middle; } .role-out { display: inline-block; margin-left: 6px; font-size: 0.65rem; font-weight: 800; color: #f87171; background: rgba(248, 113, 113, 0.15); padding: 2px 8px; border-radius: 4px; vertical-align: middle; } .injury-inline { color: #f87171; font-size: 0.75rem; font-weight: 600; } .injured-row { background: rgba(248, 113, 113, 0.08); } .player-stats-cell { color: #6b8499; font-size: 0.85rem; font-style: italic; } .injury-box { background: #0d1a24; border: 1px solid #6b8499; border-radius: 8px; padding: 12px; margin-top: 12px; } .injury-card { background: #122438; border: 1px solid #6b8499; border-radius: 6px; padding: 10px; margin-bottom: 8px; } .injury-name { font-weight: 700; color: #fff; font-size: 0.9rem; } .injury-meta { color: #6b8499; font-size: 0.8rem; margin-top: 4px; } .injury-type { color: #f87171; font-size: 0.8rem; margin-top: 4px; } .injury-games { color: #a8bdd0; font-size: 0.8rem; margin-top: 2px; } .proj-line { padding: 6px 0; border-bottom: 1px solid rgba(30,123,68,0.2); color: #a8bdd0; font-size: 0.85rem; } .award-projections { margin-top: 12px; padding: 12px; background: #0d1a24; border-radius: 8px; border: 1px solid #6b8499; }';
+    document.head.appendChild(s);
   });
 })();

@@ -21,7 +21,7 @@ window.PlayerSystem = {
 
   emptyStat() {
     return {
-      passYds: 0, passTd: 0, interceptions: 0,
+      passYds: 0, passTd: 0, interceptions: 0, passAttempts: 0, passCompletions: 0, sacksTaken: 0,
       rushYds: 0, rushTd: 0,
       recYds: 0, recTd: 0, receptions: 0,
       tackles: 0, sacks: 0, deflections: 0,

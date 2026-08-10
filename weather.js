@@ -79,26 +79,23 @@ window.WeatherSystem = {
     rain: {
       touchdown: -0.04,
       field_goal: -0.03,
-      turnover_fumble: 0.06,
+      turnover_fumble: 0.04,
       turnover_int: 0.02,
-      punt: 0.03,
-      big_stop_punt: 0.02,
+      punt: 0.02,
       note: "Wet ball — higher fumble risk, tougher passing"
     },
     wind: {
       touchdown: -0.03,
-      field_goal: -0.08,
-      missed_fg: 0.06,
-      punt: 0.02,
-      turnover_int: 0.03,
+      field_goal: -0.06,
+      missed_fg: 0.04,
+      turnover_int: 0.02,
       note: "Strong wind — kicks and deep balls suffer"
     },
     snow: {
       touchdown: -0.05,
       field_goal: -0.05,
-      turnover_fumble: 0.05,
-      punt: 0.04,
-      big_stop_punt: 0.03,
+      turnover_fumble: 0.04,
+      punt: 0.02,
       turnover_int: 0.02,
       note: "Snow — footing and ball security suffer"
     }

@@ -357,30 +357,38 @@ function saveAwards(a) { localStorage.setItem("mfl-awards", JSON.stringify(a)); 
 let awards = loadAwards();
 function getTopCandidatesForAward(awardDef) {
   if (awardDef.isTeamAward) {
-    // For team awards, return top teams by record
+    // For team awards, return top teams by record with enhanced metrics
     const standings = typeof loadStandings === "function" ? loadStandings() : {};
     const teamRecords = TEAMS.map(team => {
-      const s = standings[teamKey(team)] || { wins: 0, losses: 0, ties: 0 };
+      const s = standings[teamKey(team)] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
       const games = (s.wins || 0) + (s.losses || 0) + (s.ties || 0);
       const pct = games ? (s.wins + 0.5 * (s.ties || 0)) / games : 0;
-      return { team, winPct: pct, wins: s.wins || 0 };
-    }).sort((a, b) => b.winPct - a.winPct || b.wins - a.wins);
+      const pointDiff = (s.pf || 0) - (s.pa || 0);
+      // Enhanced team scoring: win pct + point differential bonus
+      const score = (pct * 100) + (pointDiff / 10);
+      return { team, winPct: pct, wins: s.wins || 0, pointDiff, score };
+    }).sort((a, b) => b.score - a.score || b.winPct - a.winPct || b.wins - a.wins);
 
     return teamRecords.slice(0, 5).map((t, i) => ({
       rank: i + 1,
       name: teamName(t.team),
       teamKey: teamKey(t.team),
-      value: t.winPct.toFixed(3)
+      value: t.score.toFixed(1)
     }));
   }
 
   // For player awards, get top players by position and stats
   const candidates = [];
   const positions = awardDef.positions || [];
+  const standings = typeof loadStandings === "function" ? loadStandings() : {};
 
   TEAMS.forEach(team => {
     const key = teamKey(team);
     const roster = ROSTERS[key] || [];
+    const teamStats = standings[key] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
+    const games = (teamStats.wins || 0) + (teamStats.losses || 0) + (teamStats.ties || 0);
+    const teamWinPct = games ? (teamStats.wins + 0.5 * (teamStats.ties || 0)) / games : 0;
+    const teamPointDiff = (teamStats.pf || 0) - (teamStats.pa || 0);
 
     roster.forEach(player => {
       if (!positions.includes(player.position)) return;
@@ -389,23 +397,92 @@ function getTopCandidatesForAward(awardDef) {
       const stats = window.PlayerSystem ? window.PlayerSystem.getStat(team, player) : {};
       let score = player.rating || 70;
 
-      // Position-specific scoring
+      // Calculate derived stats
+      const passAttempts = stats.passAttempts || 0;
+      const passCompletions = stats.passCompletions || 0;
+      const compPct = passAttempts > 0 ? (passCompletions / passAttempts) * 100 : 0;
+      const ydsPerAttempt = passAttempts > 0 ? (stats.passYds || 0) / passAttempts : 0;
+      const passRating = passAttempts > 0 ? ((compPct * 0.5) + (ydsPerAttempt * 4) + ((stats.passTd || 0) * 20) - ((stats.interceptions || 0) * 25)) : 0;
+      
+      const receptions = stats.receptions || 0;
+      const ydsPerRec = receptions > 0 ? (stats.recYds || 0) / receptions : 0;
+      const recYdsPerGame = games > 0 ? (stats.recYds || 0) / games : 0;
+      
+      const rushYds = stats.rushYds || 0;
+      const rushYdsPerGame = games > 0 ? rushYds / games : 0;
+      
+      // Position-specific scoring with NFL-like factors
       if (player.position === "QB") {
+        // Base stats
         score += (stats.passYds || 0) / 1000;
         score += (stats.passTd || 0) * 2;
         score -= (stats.interceptions || 0) * 3;
+        // Advanced metrics
+        score += (compPct / 100) * 5; // Completion % bonus
+        score += (ydsPerAttempt / 10) * 3; // YPA bonus
+        score += (passRating / 100) * 2; // Passer rating bonus
+        // Team success (heavier for MVP)
+        if (awardDef.id === "mvp") {
+          score += teamWinPct * 30;
+          score += (teamPointDiff / 100) * 10;
+        } else {
+          score += teamWinPct * 15;
+        }
+        // Negative factors
+        score -= (stats.sacksTaken || 0) * 0.5;
       } else if (player.position === "RB") {
+        // Base stats
         score += (stats.rushYds || 0) / 500;
         score += (stats.rushTd || 0) * 3;
         score += (stats.recYds || 0) / 1000;
-      } else if (player.position === "WR") {
+        // Advanced metrics
+        score += rushYdsPerGame * 0.5; // Yards per game
+        score += (ydsPerRec / 10) * 2; // Yards per reception
+        // Team success
+        score += teamWinPct * 10;
+        // Negative factors
+        score -= (stats.fumblesLost || 0) * 2;
+      } else if (player.position === "WR" || player.position === "TE") {
+        // Base stats
         score += (stats.recYds || 0) / 500;
         score += (stats.recTd || 0) * 3;
         score += (stats.receptions || 0) / 20;
+        // Advanced metrics
+        score += (ydsPerRec / 10) * 3; // Yards per reception
+        score += recYdsPerGame * 0.5; // Yards per game
+        score += (receptions / games) * 2; // Receptions per game
+        // Team success
+        score += teamWinPct * 10;
+        // Negative factors
+        score -= (stats.fumblesLost || 0) * 2;
       } else if (["DL", "LB", "CB", "S"].includes(player.position)) {
+        // Base stats
         score += (stats.tackles || 0) / 10;
         score += (stats.sacks || 0) * 5;
         score += (stats.deflections || 0) / 5;
+        // Advanced metrics
+        score += (stats.fumRecoveries || 0) * 4; // Takeaways
+        score += (stats.interceptions || 0) * 5; // INTs (if tracked for defenders)
+        // Team defensive success (heavier for DPOY)
+        const defensiveScore = 100 - (teamStats.pa / games); // Lower points allowed = better
+        if (awardDef.id === "defensive_poy") {
+          score += defensiveScore * 0.3;
+          score += teamWinPct * 20;
+        } else {
+          score += defensiveScore * 0.15;
+          score += teamWinPct * 10;
+        }
+      }
+
+      // Rookie bonus
+      if (awardDef.id === "rookie" && player.age <= 22) {
+        score += 15; // Rookie bonus for early career impact
+      }
+
+      // Consistency bonus (avoid stat padding) - penalize if performance is too far above rating
+      const expectedPerformance = player.rating || 70;
+      if (score > expectedPerformance + 50) {
+        score -= (score - expectedPerformance - 50) * 0.5; // Penalize extreme outliers
       }
 
       candidates.push({
@@ -499,102 +576,147 @@ function renderAwards() {
 }
 
 function openTeamPage(teamIndex) {
-  const team = TEAMS[teamIndex];
-  const key = teamKey(team);
-  const rec = standings[key] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
-  const sorted = getSortedStandings();
-  const rank = sorted.findIndex(r => teamKey(r.team) === key) + 1;
-
-  // Get coach information
-  const coach = window.CoachSystem ? window.CoachSystem.getCoach(team) : null;
-  $("team-page-name").textContent = teamName(team);
-  const ratingEl = $("team-page-rating");
-  if (ratingEl) ratingEl.textContent = `Overall: ${getTeamOverall(team)}`;
-  $("team-page-record").textContent = `${rec.wins}-${rec.losses}-${rec.ties}`;
-  const gp = rec.wins + rec.losses + rec.ties;
-  const pct = gp === 0 ? ".000" : (rec.wins / gp).toFixed(3).replace(/^0/, "");
-  const diff = rec.pf - rec.pa;
-  $("team-page-standing").textContent = `#${rank}  |  ${rec.wins}-${rec.losses}-${rec.ties}  |  PCT ${pct}  |  PF ${rec.pf}  PA ${rec.pa}  |  DIFF ${diff > 0 ? "+" : ""}${diff}`;
-
-  const upcoming = $("team-page-upcoming");
-  if (upcoming) {
-    const teamGames = schedule
-      .filter(g => teamKey(g.home) === key || teamKey(g.away) === key)
-      .sort((a, b) => a.week - b.week);
-    const byeWeek = byeWeeks[key];
-    if (teamGames.length === 0 && !byeWeek) {
-      upcoming.innerHTML = `<p class="empty-note">No schedule yet. Reset Schedule to generate.</p>`;
-    } else {
-      const lines = [];
-      for (let w = 1; w <= 18; w++) {
-        if (byeWeek === w) {
-          lines.push(`<div class="schedule-game" style="margin-bottom:6px;color:#94a3b8"><strong>Wk ${w}</strong> — BYE</div>`);
-          continue;
-        }
-        const g = teamGames.find(x => x.week === w);
-        if (!g) continue;
-        const isHome = teamKey(g.home) === key;
-        const opp = isHome ? g.away : g.home;
-        const loc = isHome ? "vs" : "@";
-        const score = g.played ? ` — ${g.awayScore}-${g.homeScore}` : "";
-        const status = g.played ? "FINAL" : "";
-        lines.push(`<div class="schedule-game" style="margin-bottom:6px"><strong>Wk ${w}</strong> ${loc} ${teamName(opp)} ${status}${score}</div>`);
-      }
-      upcoming.innerHTML = lines.join("") || `<p class="empty-note">No games found.</p>`;
+  try {
+    console.log("openTeamPage called with teamIndex:", teamIndex);
+    
+    const team = TEAMS[teamIndex];
+    if (!team) {
+      console.error("Team not found for index:", teamIndex);
+      return;
     }
-  }
+    console.log("Team found:", teamName(team));
+    
+    const key = teamKey(team);
+    console.log("Team key:", key);
+    
+    const rec = standings[key] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 };
+    const sorted = getSortedStandings();
+    const rank = sorted.findIndex(r => teamKey(r.team) === key) + 1;
 
-  const players = ROSTERS[key] || [];
-  const tbody = $("team-page-roster");
-  tbody.innerHTML = "";
-  players.forEach((p, i) => {
-    let ratingClass = "rating-low";
-    if (p.rating >= 85) ratingClass = "rating-high";
-    else if (p.rating >= 70) ratingClass = "rating-mid";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td class="rank">${i + 1}</td><td class="team-cell">${p.name}</td><td>${p.position}</td><td>${p.age}</td><td>${p.height}</td><td>${p.weight}</td><td class="${ratingClass}">${p.rating}</td>`;
-    tbody.appendChild(tr);
-  });
+    // Get coach information
+    const coach = window.CoachSystem ? window.CoachSystem.getCoach(team) : null;
+    
+    // Validate DOM elements exist
+    const nameEl = $("team-page-name");
+    const ratingEl = $("team-page-rating");
+    const recordEl = $("team-page-record");
+    const standingEl = $("team-page-standing");
+    
+    if (!nameEl) {
+      console.error("team-page-name element not found");
+      return;
+    }
+    
+    nameEl.textContent = teamName(team);
+    if (ratingEl) ratingEl.textContent = `Overall: ${getTeamOverall(team)}`;
+    if (recordEl) recordEl.textContent = `${rec.wins}-${rec.losses}-${rec.ties}`;
+    
+    const gp = rec.wins + rec.losses + rec.ties;
+    const pct = gp === 0 ? ".000" : (rec.wins / gp).toFixed(3).replace(/^0/, "");
+    const diff = rec.pf - rec.pa;
+    if (standingEl) standingEl.textContent = `#${rank}  |  ${rec.wins}-${rec.losses}-${rec.ties}  |  PCT ${pct}  |  PF ${rec.pf}  PA ${rec.pa}  |  DIFF ${diff > 0 ? "+" : ""}${diff}`;
 
-  // Add coach information section
-  const teamPage = document.getElementById("team-page-screen");
-  let coachSection = document.getElementById("team-page-coach");
-  if (!coachSection) {
-    coachSection = document.createElement("div");
-    coachSection.id = "team-page-coach";
-    coachSection.className = "team-page-section";
-    const rosterSection = teamPage.querySelector('.team-page-section:nth-child(4)'); // After roster section
-    if (rosterSection) {
-      teamPage.insertBefore(coachSection, rosterSection);
-    } else {
+    const upcoming = $("team-page-upcoming");
+    if (upcoming) {
+      const teamGames = schedule
+        .filter(g => teamKey(g.home) === key || teamKey(g.away) === key)
+        .sort((a, b) => a.week - b.week);
+      const byeWeek = byeWeeks[key];
+      if (teamGames.length === 0 && !byeWeek) {
+        upcoming.innerHTML = `<p class="empty-note">No schedule yet. Reset Schedule to generate.</p>`;
+      } else {
+        const lines = [];
+        for (let w = 1; w <= 18; w++) {
+          if (byeWeek === w) {
+            lines.push(`<div class="team-schedule-game bye-week"><span class="schedule-week">Wk ${w}</span><span class="schedule-opponent">BYE</span></div>`);
+            continue;
+          }
+          const g = teamGames.find(x => x.week === w);
+          if (!g) continue;
+          const isHome = teamKey(g.home) === key;
+          const opp = isHome ? g.away : g.home;
+          const loc = isHome ? "vs" : "@";
+          const score = g.played ? ` ${g.awayScore}-${g.homeScore}` : "";
+          const status = g.played ? '<span class="schedule-status final">FINAL</span>' : "";
+          lines.push(`<div class="team-schedule-game"><span class="schedule-week">Wk ${w}</span><span class="schedule-location">${loc}</span><span class="schedule-opponent">${teamName(opp)}</span><span class="schedule-score">${score}</span>${status}</div>`);
+        }
+        upcoming.innerHTML = `<div class="team-schedule-list">${lines.join("")}</div>` || `<p class="empty-note">No games found.</p>`;
+      }
+    }
+
+    const players = ROSTERS[key] || [];
+    const tbody = $("team-page-roster");
+    if (!tbody) {
+      console.error("team-page-roster element not found");
+      return;
+    }
+    tbody.innerHTML = "";
+    players.forEach((p, i) => {
+      let ratingClass = "rating-low";
+      if (p.rating >= 85) ratingClass = "rating-high";
+      else if (p.rating >= 70) ratingClass = "rating-mid";
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td class="rank">${i + 1}</td><td class="team-cell">${p.name}</td><td>${p.position}</td><td>${p.age}</td><td>${p.height}</td><td>${p.weight}</td><td class="${ratingClass}">${p.rating}</td>`;
+      tbody.appendChild(tr);
+    });
+
+    // Add coach information section
+    const teamPage = document.getElementById("team-page-screen");
+    if (!teamPage) {
+      console.error("team-page-screen element not found");
+      return;
+    }
+    
+    let coachSection = document.getElementById("team-page-coach");
+    if (!coachSection) {
+      coachSection = document.createElement("div");
+      coachSection.id = "team-page-coach";
+      coachSection.className = "team-page-section";
+      // Just append it to the end
       teamPage.appendChild(coachSection);
     }
-  }
 
-  if (coach) {
-    coachSection.innerHTML = `
-      <h3>Head Coach</h3>
-      <div class="coach-info">
-        <div class="coach-name">${coach.name}</div>
-        <div class="coach-stats">
-          <div class="coach-stat"><strong>Overall:</strong> <span class="${coach.overallRating >= 85 ? 'rating-high' : coach.overallRating >= 70 ? 'rating-mid' : 'rating-low'}">${coach.overallRating}</span></div>
-          <div class="coach-stat"><strong>Offense:</strong> ${coach.offenseRating}</div>
-          <div class="coach-stat"><strong>Defense:</strong> ${coach.defenseRating}</div>
-          <div class="coach-stat"><strong>Drafting:</strong> ${coach.draftingRating}</div>
-          <div class="coach-stat"><strong>Development:</strong> ${coach.developmentRating}</div>
-          <div class="coach-stat"><strong>Championships:</strong> ${coach.totalChampionships}</div>
-          <div class="coach-stat"><strong>Years with Team:</strong> ${coach.yearsWithTeam}</div>
+    if (coach) {
+      coachSection.innerHTML = `
+        <h3>Head Coach</h3>
+        <div class="coach-info">
+          <div class="coach-name">${coach.name}</div>
+          <div class="coach-stats">
+            <div class="coach-stat"><strong>Overall:</strong> <span class="${coach.overallRating >= 85 ? 'rating-high' : coach.overallRating >= 70 ? 'rating-mid' : 'rating-low'}">${coach.overallRating}</span></div>
+            <div class="coach-stat"><strong>Offense:</strong> ${coach.offenseRating}</div>
+            <div class="coach-stat"><strong>Defense:</strong> ${coach.defenseRating}</div>
+            <div class="coach-stat"><strong>Drafting:</strong> ${coach.draftingRating}</div>
+            <div class="coach-stat"><strong>Development:</strong> ${coach.developmentRating}</div>
+            <div class="coach-stat"><strong>Championships:</strong> ${coach.totalChampionships}</div>
+            <div class="coach-stat"><strong>Years with Team:</strong> ${coach.yearsWithTeam}</div>
+          </div>
         </div>
-      </div>
-    `;
-  } else {
-    coachSection.innerHTML = `
-      <h3>Head Coach</h3>
-      <p class="empty-note">No coach information available</p>
-    `;
-  }
+      `;
+    } else {
+      coachSection.innerHTML = `
+        <h3>Head Coach</h3>
+        <p class="empty-note">No coach information available</p>
+      `;
+    }
 
-  showScreen("team-page-screen");
+    showScreen("team-page-screen");
+    console.log("Team page rendered successfully for:", teamName(team));
+    
+    // Scroll to top of main content area
+    const mainEl = document.querySelector(".main");
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+    }
+  } catch (error) {
+    console.error("Error in openTeamPage:", error);
+    console.error("Error stack:", error.stack);
+    // Show error message to user
+    const teamPage = document.getElementById("team-page-screen");
+    if (teamPage) {
+      teamPage.innerHTML = `<div class="team-page-section"><h3>Error</h3><p>Failed to load team page: ${error.message}</p></div>`;
+      showScreen("team-page-screen");
+    }
+  }
 }
 
 let game = null;
@@ -653,7 +775,9 @@ function showScreen(id) {
   if (id === "setup-screen") renderWeeklyGames();
 }
 function applyTime(seconds) {
-  game.clockSeconds -= seconds;
+  const multiplier = (window.gameClockMultiplier && window.gameClockMultiplier.value) ? window.gameClockMultiplier.value : 1;
+  const adjustedSeconds = seconds * multiplier;
+  game.clockSeconds -= adjustedSeconds;
   if (game.clockSeconds <= 0) {
     game.clockSeconds = 0;
     if (game.quarter >= 4) {
@@ -662,8 +786,9 @@ function applyTime(seconds) {
       finishGame();
     } else {
       game.quarter += 1;
-      game.clockSeconds = 15 * 60;
-      game.playLog.push(`--- End of Quarter ${game.quarter - 1} ---`);
+      const quarterMinutes = (parseInt(localStorage.getItem("mfl-quarter-length") === "quick" ? 5 : localStorage.getItem("mfl-quarter-length") === "realistic" ? 15 : 10) || 10);
+      game.clockSeconds = quarterMinutes * 60;
+      game.playLog.push("--- End of Quarter " + (game.quarter - 1) + " ---");
     }
   }
 }
@@ -798,6 +923,100 @@ window.addEventListener("DOMContentLoaded", () => {
   const resetScheduleBtn = $("reset-schedule-btn");
   if (resetScheduleBtn) resetScheduleBtn.addEventListener("click", resetSchedule);
   $("back-to-standings").addEventListener("click", () => showScreen("standings-screen"));
+
+  // Settings page handlers
+  try {
+    const quarterLength = $("quarter-length");
+    const difficulty = $("difficulty");
+    if (quarterLength) {
+      quarterLength.value = localStorage.getItem("mfl-quarter-length") || "normal";
+      quarterLength.addEventListener("change", function() {
+        localStorage.setItem("mfl-quarter-length", quarterLength.value);
+        applyQuarterLength(quarterLength.value);
+      });
+    }
+    if (difficulty) {
+      difficulty.value = localStorage.getItem("mfl-difficulty") || "normal";
+      difficulty.addEventListener("change", function() {
+        localStorage.setItem("mfl-difficulty", difficulty.value);
+      });
+    }
+
+    const theme = $("theme");
+    const animations = $("animations");
+    const sound = $("sound");
+    if (theme) {
+      theme.value = localStorage.getItem("mfl-theme") || "default";
+      theme.addEventListener("change", function() {
+        localStorage.setItem("mfl-theme", theme.value);
+        applyTheme(theme.value);
+      });
+    }
+    if (animations) {
+      animations.checked = localStorage.getItem("mfl-animations") !== "false";
+      animations.addEventListener("change", function() {
+        localStorage.setItem("mfl-animations", animations.checked);
+        applyAnimations(animations.checked);
+      });
+    }
+    if (sound) {
+      sound.checked = localStorage.getItem("mfl-sound") !== "false";
+      sound.addEventListener("change", function() {
+        localStorage.setItem("mfl-sound", sound.checked);
+      });
+    }
+
+    const saveBtns = document.querySelectorAll(".save-btn");
+    const loadBtns = document.querySelectorAll(".load-btn");
+    saveBtns.forEach(btn => {
+      btn.addEventListener("click", function() {
+        const slot = btn.dataset.slot;
+        saveGame(slot);
+      });
+    });
+    loadBtns.forEach(btn => {
+      btn.addEventListener("click", function() {
+        const slot = btn.dataset.slot;
+        loadGame(slot);
+      });
+    });
+    if (saveBtns.length > 0) updateSaveSlots();
+
+    const exportBtn = $("export-btn");
+    const importBtn = $("import-btn");
+    const importFile = $("import-file");
+    if (exportBtn) exportBtn.addEventListener("click", exportGameData);
+    if (importBtn) importBtn.addEventListener("click", function() { importFile.click(); });
+    if (importFile) importFile.addEventListener("change", importGameData);
+
+    const resetBtns = document.querySelectorAll("[data-reset]");
+    resetBtns.forEach(btn => {
+      btn.addEventListener("click", function() {
+        const resetType = btn.dataset.reset;
+        selectiveReset(resetType);
+      });
+    });
+
+    const resetEverythingBtn = $("reset-everything-btn");
+    if (resetEverythingBtn) resetEverythingBtn.addEventListener("click", resetEverything);
+
+    // Settings tab switching
+    const tabs = document.querySelectorAll(".settings-tab");
+    const panels = document.querySelectorAll(".settings-tab-panel");
+    tabs.forEach(tab => {
+      tab.addEventListener("click", function() {
+        const target = tab.dataset.tab;
+        tabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        panels.forEach(p => p.classList.add("hidden"));
+        const targetPanel = $("settings-tab-" + target);
+        if (targetPanel) targetPanel.classList.remove("hidden");
+      });
+    });
+    console.log("Settings handlers initialized successfully");
+  } catch (e) {
+    console.error("Error initializing settings handlers:", e);
+  }
 
   const prevWeek = $("prev-week-btn");
   const nextWeek = $("next-week-btn");

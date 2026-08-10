@@ -102,21 +102,47 @@
       const redZone = yl >= 80;
       const late = (game.clockSeconds <= 35) || ((game.quarter === 2 || game.quarter >= 4) && game.clockSeconds <= 55);
 
+      // Check if game should end (end of half/game logic)
+      const DE = window.DriveEngine;
+      if (DE && DE.shouldEndHalf && DE.shouldEndHalf(game)) {
+        return { id: "end_of_half", position, oRating, dRating, weather: game.weather.condition };
+      }
+
       let w = {
-        touchdown: 0.18 + edge * 0.12 + (redZone ? 0.12 : 0),
-        field_goal: 0.10 + (fgOk ? 0.10 : 0.04) + (late && fgOk ? 0.08 : 0),
-        missed_fg: 0.03 + (fgOk ? 0.02 : 0),
-        punt: 0.28 - edge * 0.08,
-        turnover_int: 0.07 - edge * 0.04,
-        turnover_fumble: 0.05,
-        turnover_downs: 0.10 - edge * 0.03,
-        safety: deepOwn ? 0.03 : 0.005,
-        big_stop_punt: 0.06 - edge * 0.02
+        touchdown: 0.199,
+        field_goal: 0.126,
+        missed_fg: 0.018,
+        punt: 0.272,
+        turnover_int: 0.071,
+        turnover_fumble: 0.041,
+        turnover_downs: 0.110,
+        safety: 0.005,
+        blocked_kick: 0.006,
+        end_of_half: 0.152
       };
-      if (!deepOwn) w.safety = 0.005;
-      if (yl < 35) w.touchdown *= 0.55;
+
+      // Apply rating edge modifiers
+      w.touchdown += edge * 0.05;
+      w.punt -= edge * 0.03;
+      w.turnover_int -= edge * 0.02;
+      w.turnover_fumble -= edge * 0.01;
+      w.turnover_downs -= edge * 0.02;
+
+      // Ensure no weight goes below 0
+      Object.keys(w).forEach(key => {
+        if (w[key] < 0) w[key] = 0;
+      });
 
       WS().applyToWeights(w, game.weather);
+
+      // Apply time of day modifiers
+      if (game && game.kickoff && game.kickoff.timeStr) {
+        const timeStr = game.kickoff.timeStr;
+        if (timeStr === "8:20 PM") {
+          w.touchdown += 0.02;
+          w.punt -= 0.02;
+        }
+      }
 
       let sum = Object.values(w).reduce((a, b) => a + Math.max(0, b), 0);
       if (sum <= 0) return result;

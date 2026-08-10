@@ -22,7 +22,7 @@ window.LiveStats = {
 
   empty() {
     return {
-      passYds: 0, passTd: 0, interceptions: 0,
+      passYds: 0, passTd: 0, interceptions: 0, passAttempts: 0, passCompletions: 0, sacksTaken: 0,
       rushYds: 0, rushTd: 0,
       recYds: 0, recTd: 0, receptions: 0,
       tackles: 0, sacks: 0, deflections: 0,
@@ -79,26 +79,32 @@ window.LiveStats = {
     const s = row.stats;
     const bits = [];
     if (s.passYds || s.passTd || (s.interceptions && row.position === "QB")) {
-      bits.push(`${s.passYds} pass · ${s.passTd} TD · ${s.interceptions} INT`);
+      const rate = s.passAttempts > 0 ? s.passCompletions + '/' + s.passAttempts : '0/0';
+      bits.push(rate + ' · ' + s.passYds + ' yds (pass) · ' + s.passTd + ' TD · ' + s.interceptions + ' INT');
     }
-    if (s.rushYds || s.rushTd) bits.push(`${s.rushYds} rush · ${s.rushTd} TD`);
+    if (s.sacksTaken && row.position === "QB") {
+      bits.push(s.sacksTaken + ' sacked');
+    }
+    if (s.rushYds || s.rushTd) {
+      bits.push(s.rushYds + ' yds (rush) · ' + s.rushTd + ' TD');
+    }
     if (s.receptions || s.recYds || s.recTd) {
-      bits.push(`${s.receptions} rec · ${s.recYds} yds · ${s.recTd} TD`);
+      bits.push(s.receptions + ' rec · ' + s.recYds + ' yds · ' + s.recTd + ' TD');
     }
     if (s.tackles || s.sacks || s.deflections) {
-      bits.push(`${s.tackles} tkl · ${s.sacks} sk · ${s.deflections} pbu`);
+      bits.push(s.tackles + ' tkl · ' + s.sacks + ' sk · ' + s.deflections + ' pbu');
     }
-    if (s.interceptions && row.position !== "QB") bits.push(`${s.interceptions} INT`);
-    if (s.fgMade || s.fgMiss) bits.push(`FG ${s.fgMade}/${s.fgMade + s.fgMiss}`);
-    if (s.punts) bits.push(`${s.punts} punt · ${s.puntYds} yds`);
+    if (s.interceptions && row.position !== "QB") bits.push(s.interceptions + ' INT');
+    if (s.fgMade || s.fgMiss) bits.push('FG ' + s.fgMade + '/' + (s.fgMade + s.fgMiss));
+    if (s.punts) bits.push(s.punts + ' punt · ' + s.puntYds + ' yds');
     if (s.returnYds || s.returnTd || s.kickRetYds || s.puntRetYds) {
       const ry = (s.returnYds || 0) || ((s.kickRetYds || 0) + (s.puntRetYds || 0));
-      bits.push(`${ry} ret yds${s.returnTd ? " · " + s.returnTd + " ret TD" : ""}`);
+      bits.push(ry + ' ret yds' + (s.returnTd ? ' · ' + s.returnTd + ' ret TD' : ''));
     }
-    if (s.fumblesLost) bits.push(`${s.fumblesLost} fum lost`);
-    if (s.fumRecoveries) bits.push(`${s.fumRecoveries} fum rec`);
-    if (!bits.length) bits.push(`${s.plays} play${s.plays === 1 ? "" : "s"}`);
-    return bits.join("  |  ");
+    if (s.fumblesLost) bits.push(s.fumblesLost + ' fum lost');
+    if (s.fumRecoveries) bits.push(s.fumRecoveries + ' fum rec');
+    if (!bits.length) bits.push(s.plays + ' play' + (s.plays === 1 ? '' : 's'));
+    return bits.join('  |  ');
   },
 
   /** Filter by offense/defense and sort by position order, then name. */

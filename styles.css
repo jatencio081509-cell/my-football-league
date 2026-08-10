@@ -45,8 +45,9 @@ body {
   display: flex;
   flex-direction: row;
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   align-items: stretch;
+  overflow: hidden;
 }
 
 /* ========== SIDEBAR ========== */
@@ -124,18 +125,25 @@ body {
 .main {
   flex: 1;
   min-width: 0;
-  min-height: 100vh;
+  height: 100vh;
   padding: 28px 32px;
-  overflow-y: auto;
   background: var(--navy-deep);
+  position: relative;
+  overflow-y: auto;
 }
 
 .screen {
-  min-height: 100vh;
+  min-height: 100%;
   width: 100%;
   padding: 32px 40px;
   background: var(--navy-mid);
   border-radius: 0;
+  position: relative;
+  z-index: 1;
+}
+
+#team-page-screen {
+  overflow: visible;
 }
 
 .hidden {
@@ -577,6 +585,15 @@ h2 {
 /* ========== TEAM PAGE ========== */
 .back-btn { margin-bottom: 16px; }
 
+/* Ensure team page displays at top without scroll */
+#team-page-screen {
+  position: relative;
+  z-index: 1;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  top: 0 !important;
+}
+
 .team-page-header {
   display: flex;
   justify-content: space-between;
@@ -619,8 +636,105 @@ h2 {
   padding: 14px 18px;
   font-size: 1.05rem;
 }
+
+/* Team Schedule */
+.team-schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-schedule-game {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--navy-deep);
+  border-radius: 6px;
+  border: 1px solid var(--navy-mid);
+  transition: background 0.15s;
+}
+
+.team-schedule-game:hover {
+  background: rgba(253, 184, 19, 0.05);
+}
+
+.team-schedule-game.bye-week {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.schedule-week {
+  font-weight: 700;
+  color: var(--gold);
+  min-width: 45px;
+  font-size: 0.9rem;
+}
+
+.schedule-location {
+  font-weight: 600;
+  color: var(--field-green-light);
+  min-width: 25px;
+  font-size: 0.9rem;
+}
+
+.schedule-opponent {
+  flex: 1;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.schedule-score {
+  font-weight: 700;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.schedule-status {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.schedule-status.final {
+  background: var(--field-green);
+  color: var(--white);
+}
 .empty-note { color: var(--text-dim); font-style: italic; }
 .roster-table .rating-high { color: var(--field-green-light); font-weight: 600; }
+
+/* ========== LATEST PLAY DISPLAY ========== */
+.latest-play {
+  background: var(--navy);
+  border: 1px solid var(--navy-mid);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.latest-play-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--gold);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.latest-play-text {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.latest-injury {
+  display: block;
+  font-size: 0.85rem;
+  color: #f87171;
+  padding-top: 8px;
+  border-top: 1px solid var(--navy-mid);
+}
 .roster-table .rating-mid { color: var(--gold); }
 .roster-table .rating-low { color: var(--text-muted); }
 
@@ -878,4 +992,183 @@ h2 {
 }
 .field-end-home {
   transform: none;
+}
+
+/* Settings Page */
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 16px;
+  flex-wrap: wrap;
+}
+
+.settings-tab {
+  background: #122438;
+  border: 1px solid #1E7B44;
+  color: #a8bdd0;
+  font-weight: 800;
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.settings-tab.active {
+  background: linear-gradient(135deg, #1E7B44, #1D70B8);
+  color: #fff;
+  border-color: transparent;
+}
+
+.settings-tab-panel {
+  display: none;
+}
+
+.settings-tab-panel:not(.hidden) {
+  display: block;
+}
+
+.settings-section {
+  background: #0d1a24;
+  border: 1px solid #1E7B44;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.settings-section h3 {
+  color: #FDB813;
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+}
+
+.settings-desc {
+  color: #a8bdd0;
+  margin: 0 0 16px 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.setting-control {
+  margin-bottom: 12px;
+}
+
+.setting-control label {
+  display: block;
+  color: #e8f1f8;
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+}
+
+.settings-select {
+  background: #122438;
+  border: 1px solid #6b8499;
+  color: #a8bdd0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  min-width: 200px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.toggle-label span {
+  color: #e8f1f8;
+  font-size: 0.9rem;
+}
+
+.save-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.save-slot {
+  background: #122438;
+  border: 1px solid #6b8499;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.save-slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(30, 123, 68, 0.3);
+}
+
+.save-slot-number {
+  font-weight: 800;
+  color: #FDB813;
+  font-size: 0.9rem;
+}
+
+.save-slot-status {
+  font-size: 0.8rem;
+  color: #6b8499;
+}
+
+.save-slot-status.has-save {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.save-slot-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.save-slot-info {
+  font-size: 0.8rem;
+  color: #a8bdd0;
+  min-height: 1.2em;
+}
+
+.import-area {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.reset-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hidden {
+  display: none;
+}
+
+.no-animations * {
+  transition: none !important;
+  animation: none !important;
+}
+
+.theme-dark {
+  --field-green: #1a5a2d;
+  --gold: #d4a817;
+  --navy: #0a0f1a;
+  --royal: #1a5a8c;
+}
+
+.theme-light {
+  --field-green: #2d8a5d;
+  --gold: #d9a822;
+  --navy: #f5f5f5;
+  --royal: #2d7ba0;
 }

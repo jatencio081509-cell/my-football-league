@@ -42,6 +42,7 @@
         <button class="sidebar-btn" data-screen="playoffs-screen">Playoffs</button>
         <button class="sidebar-btn" data-screen="awards-screen">Awards</button>
         <button class="sidebar-btn" data-screen="draft-screen">Draft</button>
+        <button class="sidebar-btn" data-screen="settings-screen">Settings</button>
       </nav>
       <div class="sidebar-footer"><p>Dice League</p></div>
     </aside>
@@ -138,31 +139,6 @@
         <div id="standings-container" class="standings-container"></div>
       </div>
 
-      <div id="schedule-screen" class="screen hidden">
-        <div class="standings-header">
-          <h2>League Schedule</h2>
-          <button id="reset-schedule-btn" class="btn danger small">Reset Schedule</button>
-        </div>
-        <div id="schedule-container" class="schedule-container"></div>
-      </div>
-
-      <div id="playoffs-screen" class="screen hidden">
-        <div class="standings-header">
-          <h2>Playoffs</h2>
-        </div>
-        <div id="playoffs-container" class="playoffs-container"></div>
-      </div>
-
-      <div id="awards-screen" class="screen hidden">
-        <div class="standings-header">
-          <h2>League Awards</h2>
-          <button id="reset-awards-btn" class="btn danger small">Reset Awards</button>
-        </div>
-        <div id="awards-list" class="awards-list"></div>
-      </div>
-
-      <div id="draft-screen" class="screen hidden"></div>
-
       <div id="team-page-screen" class="screen hidden">
         <button id="back-to-standings" class="btn small back-btn">← Back to Standings</button>
         <div class="team-page-header">
@@ -197,6 +173,176 @@
               </thead>
               <tbody id="team-page-roster"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="schedule-screen" class="screen hidden">
+        <div class="standings-header">
+          <h2>League Schedule</h2>
+          <button id="reset-schedule-btn" class="btn danger small">Reset Schedule</button>
+        </div>
+        <div id="schedule-container" class="schedule-container"></div>
+      </div>
+
+      <div id="playoffs-screen" class="screen hidden">
+        <div class="standings-header">
+          <h2>Playoffs</h2>
+        </div>
+        <div id="playoffs-container" class="playoffs-container"></div>
+      </div>
+
+      <div id="awards-screen" class="screen hidden">
+        <div class="standings-header">
+          <h2>League Awards</h2>
+          <button id="reset-awards-btn" class="btn danger small">Reset Awards</button>
+        </div>
+        <div id="awards-list" class="awards-list"></div>
+      </div>
+
+      <div id="draft-screen" class="screen hidden"></div>
+
+      <div id="settings-screen" class="screen hidden">
+        <div class="standings-header">
+          <h2>Settings</h2>
+        </div>
+        <div class="settings-tabs">
+          <button type="button" class="settings-tab active" data-tab="game">Game Rules</button>
+          <button type="button" class="settings-tab" data-tab="display">Display</button>
+          <button type="button" class="settings-tab" data-tab="data">Data Management</button>
+          <button type="button" class="settings-tab" data-tab="advanced">Advanced</button>
+        </div>
+        
+        <div id="settings-tab-game" class="settings-tab-panel">
+          <div class="settings-section">
+            <h3>Game Speed</h3>
+            <p class="settings-desc">Adjust how long each quarter lasts. Affects game duration and pacing.</p>
+            <div class="setting-control">
+              <label for="quarter-length">Quarter Length:</label>
+              <select id="quarter-length" class="settings-select">
+                <option value="quick">Quick (5 min)</option>
+                <option value="normal" selected>Normal (10 min)</option>
+                <option value="realistic">Realistic (15 min)</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Difficulty</h3>
+            <p class="settings-desc">Adjust game difficulty modifiers that affect player performance and outcomes.</p>
+            <div class="setting-control">
+              <label for="difficulty">Difficulty Level:</label>
+              <select id="difficulty" class="settings-select">
+                <option value="easy">Easy</option>
+                <option value="normal" selected>Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <div id="settings-tab-display" class="settings-tab-panel hidden">
+          <div class="settings-section">
+            <h3>Theme</h3>
+            <p class="settings-desc">Choose your preferred color scheme for the game interface.</p>
+            <div class="setting-control">
+              <label for="theme">Theme:</label>
+              <select id="theme" class="settings-select">
+                <option value="default" selected>Default (MFL)</option>
+                <option value="dark">Dark Mode</option>
+                <option value="light">Light Mode</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Animations</h3>
+            <p class="settings-desc">Control visual effects and animations throughout the interface.</p>
+            <div class="setting-control">
+              <label class="toggle-label">
+                <input type="checkbox" id="animations" checked>
+                <span>Enable Animations</span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Sound</h3>
+            <p class="settings-desc">Toggle sound effects for game events.</p>
+            <div class="setting-control">
+              <label class="toggle-label">
+                <input type="checkbox" id="sound" checked>
+                <span>Enable Sound Effects</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <div id="settings-tab-data" class="settings-tab-panel hidden">
+          <div class="settings-section">
+            <h3>Save/Load Game</h3>
+            <p class="settings-desc">Save your game progress to a slot or load from a previous save.</p>
+            <div class="save-slots">
+              <div class="save-slot" data-slot="1">
+                <div class="save-slot-header">
+                  <span class="save-slot-number">Slot 1</span>
+                  <span class="save-slot-status">Empty</span>
+                </div>
+                <div class="save-slot-actions">
+                  <button class="btn small save-btn" data-slot="1">Save</button>
+                  <button class="btn small load-btn" data-slot="1" disabled>Load</button>
+                </div>
+                <div class="save-slot-info"></div>
+              </div>
+              <div class="save-slot" data-slot="2">
+                <div class="save-slot-header">
+                  <span class="save-slot-number">Slot 2</span>
+                  <span class="save-slot-status">Empty</span>
+                </div>
+                <div class="save-slot-actions">
+                  <button class="btn small save-btn" data-slot="2">Save</button>
+                  <button class="btn small load-btn" data-slot="2" disabled>Load</button>
+                </div>
+                <div class="save-slot-info"></div>
+              </div>
+              <div class="save-slot" data-slot="3">
+                <div class="save-slot-header">
+                  <span class="save-slot-number">Slot 3</span>
+                  <span class="save-slot-status">Empty</span>
+                </div>
+                <div class="save-slot-actions">
+                  <button class="btn small save-btn" data-slot="3">Save</button>
+                  <button class="btn small load-btn" data-slot="3" disabled>Load</div>
+                </div>
+                <div class="save-slot-info"></div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Export/Import Data</h3>
+            <p class="settings-desc">Export your entire game data to a file or import from a backup.</p>
+            <div class="setting-control">
+              <button id="export-btn" class="btn primary">Export Game Data</button>
+              <div class="import-area">
+                <input type="file" id="import-file" accept=".json" class="hidden">
+                <button id="import-btn" class="btn">Import Game Data</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Reset Options</h3>
+            <p class="settings-desc">Reset specific categories of data without losing everything.</p>
+            <div class="reset-options">
+              <button class="btn danger small" data-reset="injuries">Reset Injuries Only</button>
+              <button class="btn danger small" data-reset="stats">Reset Stats Only</button>
+              <button class="btn danger small" data-reset="season">Reset Season Only</button>
+              <button class="btn danger small" data-reset="draft">Reset Draft Only</button>
+            </div>
+          </div>
+        </div>
+        
+        <div id="settings-tab-advanced" class="settings-tab-panel hidden">
+          <div class="settings-section">
+            <h3>Data Management</h3>
+            <p class="settings-desc">Reset all game data, stats, and progress. This action cannot be undone.</p>
+            <button id="reset-everything-btn" class="btn danger">Reset Everything</button>
           </div>
         </div>
       </div>

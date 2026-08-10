@@ -22,7 +22,8 @@ window.DriveEngine = {
     fumble: [12, 20],
     safety: [10, 16],
     touchdown_pass: [10, 18],
-    touchdown_run: [22, 35]
+    touchdown_run: [22, 35],
+    kneel: [30, 40]
   },
 
   rand(min, max) {
@@ -57,6 +58,33 @@ window.DriveEngine = {
     return yardLine >= 60; // own 60+ → about opp 40 or closer
   },
 
+  shouldEndHalf(game) {
+    if (!game) return false;
+    const c = game.clockSeconds || 0;
+    const q = game.quarter || 1;
+    const possession = game.possession || "home";
+    const homeScore = game.homeScore || 0;
+    const awayScore = game.awayScore || 0;
+
+    // Check if it's end of half or game situation
+    const isEndOfHalf = (q === 2 && c <= 10) || (q === 4 && c <= 10);
+    if (!isEndOfHalf) return false;
+
+    // Determine who's leading
+    const leading = possession === "home" ? homeScore >= awayScore : awayScore >= homeScore;
+    const scoreDiff = Math.abs(homeScore - awayScore);
+
+    // End of half/game if:
+    // - Leading by any margin with very little time left (under 10 seconds)
+    // - Leading by significant margin (14+ points) with little time left (under 30 seconds)
+    // - Trailing by huge margin (21+ points) with very little time left (under 15 seconds)
+    if (c <= 5) return true; // Final seconds
+    if (leading && scoreDiff >= 14 && c <= 30) return true;
+    if (!leading && scoreDiff >= 21 && c <= 15) return true;
+
+    return false;
+  },
+
   resolveDriveFromDice(roll, game) {
     const combinationIndex =
       ((((((roll.d4 - 1) * 10 + roll.d10_0_9)
@@ -80,21 +108,49 @@ window.DriveEngine = {
     const redZone = yl >= 80;
     const late = this.timeRunningOut(game);
 
+    // Check if game should end (end of half/game logic)
+    if (this.shouldEndHalf(game)) {
+      return { id: "end_of_half", position, oRating, dRating };
+    }
+
     let w = {
-      touchdown: 0.18 + edge * 0.12 + (redZone ? 0.12 : 0),
-      // FG weight only if already in range OR drive can march there; still resolved on 4th/late
-      field_goal: 0.10 + (fgOk ? 0.10 : 0.04) + (late && fgOk ? 0.08 : 0),
-      missed_fg: 0.03 + (fgOk ? 0.02 : 0),
-      punt: 0.28 - edge * 0.08,
-      turnover_int: 0.07 - edge * 0.04,
-      turnover_fumble: 0.05,
-      turnover_downs: 0.10 - edge * 0.03,
-      safety: deepOwn ? 0.03 : 0.005,
-      big_stop_punt: 0.06 - edge * 0.02
+      touchdown: 0.199,
+      field_goal: 0.126,
+      missed_fg: 0.018,
+      punt: 0.272,
+      turnover_int: 0.071,
+      turnover_fumble: 0.041,
+      turnover_downs: 0.110,
+      safety: 0.005,
+      blocked_kick: 0.006,
+      end_of_half: 0.152
     };
 
-    if (!deepOwn) w.safety = 0.005;
-    if (yl < 35) w.touchdown *= 0.55;
+    // Apply rating edge modifiers
+    w.touchdown += edge * 0.05;
+    w.punt -= edge * 0.03;
+    w.turnover_int -= edge * 0.02;
+    w.turnover_fumble -= edge * 0.01;
+    w.turnover_downs -= edge * 0.02;
+
+    // Ensure no weight goes below 0
+    Object.keys(w).forEach(key => {
+      if (w[key] < 0) w[key] = 0;
+    });
+
+    // Apply weather modifiers if weather system is available
+    if (window.WeatherSystem && game && game.weather) {
+      window.WeatherSystem.applyToWeights(w, game.weather);
+    }
+
+    // Apply time of day modifiers
+    if (game && game.kickoff && game.kickoff.timeStr) {
+      const timeStr = game.kickoff.timeStr;
+      if (timeStr === "8:20 PM") {
+        w.touchdown += 0.02;
+        w.punt -= 0.02;
+      }
+    }
 
     let sum = Object.values(w).reduce((a, b) => a + Math.max(0, b), 0);
     const entries = Object.keys(w).map(id => ({ id, weight: Math.max(0, w[id]) / sum }));
@@ -181,7 +237,7 @@ window.DriveEngine = {
     if (kind === "pass") {
       if (y === 0) {
         play = { yards: 0, time: this.clockFor("incomplete"), playType: "incomplete", special: null, text: "" };
-        this.withPersonnel(game, play, { qb: () => ({}), def: () => ({ deflections: 1 }) });
+        this.withPersonnel(game, play, { qb: () => ({ passAttempts: 1 }), def: () => ({ deflections: 1 }) });
         const qb = play.actors.qb;
         play.text = this.pick([
           `${qb ? qb.name : "QB"} incomplete`,
@@ -195,7 +251,7 @@ window.DriveEngine = {
       else if (y >= 10) type = "pass_medium";
       play = { yards: y, time: this.clockFor(type), playType: type, special: null, text: "" };
       this.withPersonnel(game, play, {
-        qb: () => ({ passYds: y }),
+        qb: () => ({ passYds: y, passAttempts: 1, passCompletions: 1 }),
         wr: () => ({ recYds: y, receptions: 1 })
       });
       play.text = `${play.actors.qb ? play.actors.qb.name : "QB"} to ${play.actors.wr ? play.actors.wr.name : "WR"} for ${y}`;
@@ -205,17 +261,36 @@ window.DriveEngine = {
     if (kind === "sack") {
       play = { yards: y, time: this.clockFor("sack"), playType: "sack", special: null, text: "" };
       this.withPersonnel(game, play, {
-        qb: () => ({}),
+        qb: () => ({ passAttempts: 1, sacksTaken: 1 }),
         sacker: () => ({ sacks: 1, tackles: 1 })
       });
       play.text = `Sack by ${play.actors.sacker ? play.actors.sacker.name : "defense"} — loss of ${Math.abs(y)}`;
       return play;
     }
 
+    if (kind === "scramble") {
+      let type = "run_short";
+      if (y >= 12) type = "run_big";
+      else if (y >= 5) type = "run_medium";
+      else type = y <= 0 ? "stuff" : "run_short";
+      play = { yards: y, time: this.clockFor(type), playType: "scramble", special: null, text: "" };
+      this.withPersonnel(game, play, {
+        qb: () => ({ rushYds: Math.max(0, y), rushTd: 0, passAttempts: 1 }),
+        def: y <= 0 ? () => ({ tackles: 1 }) : null
+      });
+      const name = play.actors.qb ? play.actors.qb.name : "QB";
+      play.text = y > 0
+        ? this.pick([`${name} scrambles for ${y}`, `${name} takes off and gains ${y}`, `${name} runs for ${y}`])
+        : y === 0
+          ? `${name} stuffed at the line — no gain`
+          : `${name} tackled for a loss of ${Math.abs(y)}`;
+      return play;
+    }
+
     if (kind === "screen") {
       play = { yards: y, time: this.clockFor("screen"), playType: "screen", special: null, text: "" };
       this.withPersonnel(game, play, {
-        qb: () => ({ passYds: Math.max(0, y) }),
+        qb: () => ({ passYds: Math.max(0, y), passAttempts: 1, passCompletions: 1 }),
         rb: () => ({ recYds: Math.max(0, y), receptions: y > 0 ? 1 : 0 })
       });
       play.text = `Screen to ${play.actors.rb ? play.actors.rb.name : "RB"} for ${y}`;
@@ -229,9 +304,10 @@ window.DriveEngine = {
   randomSnap(game, preferShort) {
     const r = Math.random();
     if (r < 0.12) return this.makePlay(game, "sack", -this.rand(1, 5));
-    if (r < 0.30) return this.makePlay(game, "pass", 0);
-    if (r < 0.55) return this.makePlay(game, "run", preferShort ? this.rand(0, 4) : this.rand(0, 8));
-    if (r < 0.80) return this.makePlay(game, "pass", preferShort ? this.rand(1, 6) : this.rand(1, 12));
+    if (r < 0.20) return this.makePlay(game, "scramble", preferShort ? this.rand(0, 4) : this.rand(0, 8));
+    if (r < 0.38) return this.makePlay(game, "pass", 0);
+    if (r < 0.60) return this.makePlay(game, "run", preferShort ? this.rand(0, 4) : this.rand(0, 8));
+    if (r < 0.85) return this.makePlay(game, "pass", preferShort ? this.rand(1, 6) : this.rand(1, 12));
     return this.makePlay(game, "screen", this.rand(1, 8));
   },
 
@@ -344,16 +420,16 @@ window.DriveEngine = {
 
     switch (outcome.id) {
       case "touchdown": {
-        // March with real-ish downs until score
+        // March with real-ish downs until score - improved success rate
         let yl = start;
         let down = 1;
         let distance = 10;
         let guard = 0;
-        while (yl < 100 && guard < 20) {
+        while (yl < 100 && guard < 25) {
           guard++;
           const need = 100 - yl;
-          if (need <= 12 && Math.random() < 0.55) {
-            // scoring play
+          if (need <= 12 && Math.random() < 0.65) {
+            // scoring play - increased probability
             const finalGain = need;
             const isPass = Math.random() < 0.55;
             const play = {
@@ -378,7 +454,12 @@ window.DriveEngine = {
             plays.push(play);
             break;
           }
+          // Use improved randomSnap for TD drives - better gains
           const play = this.randomSnap(game, false);
+          // Boost gains for TD drives to prevent stalling
+          if (play.yards > 0 && play.yards < distance) {
+            play.yards = Math.min(play.yards + this.rand(1, 4), distance);
+          }
           // avoid accidental huge plays past end zone
           if (yl + play.yards >= 100) {
             play.yards = 100 - yl;
@@ -396,10 +477,36 @@ window.DriveEngine = {
             down += 1;
             distance = Math.max(1, distance - play.yards);
             if (down > 4) {
-              // stalled — convert outcome to punt/fg path
-              return this.generatePlays(game, {
-                id: this.inFgRange(yl) ? (Math.random() < 0.75 ? "field_goal" : "missed_fg") : "punt"
-              });
+              // If stalled on 4th down, give one more chance with a big play
+              if (guard < 20) {
+                down = 1;
+                distance = 10;
+                continue;
+              }
+              // Final fallback - still should result in TD
+              const finalGain = 100 - yl;
+              const isPass = Math.random() < 0.5;
+              const finalPlay = {
+                yards: finalGain,
+                time: this.clockFor(isPass ? "touchdown_pass" : "touchdown_run"),
+                playType: isPass ? "touchdown_pass" : "touchdown_run",
+                special: "td",
+                text: ""
+              };
+              if (isPass) {
+                this.withPersonnel(game, finalPlay, {
+                  qb: () => ({ passYds: finalGain, passTd: 1 }),
+                  wr: () => ({ recYds: finalGain, recTd: 1, receptions: 1 })
+                });
+                finalPlay.text = `TOUCHDOWN! ${finalPlay.actors.qb ? finalPlay.actors.qb.name : "QB"} to ${finalPlay.actors.wr ? finalPlay.actors.wr.name : "WR"} for ${finalGain}`;
+              } else {
+                this.withPersonnel(game, finalPlay, {
+                  rb: () => ({ rushYds: finalGain, rushTd: 1 })
+                });
+                finalPlay.text = `TOUCHDOWN! ${finalPlay.actors.rb ? finalPlay.actors.rb.name : "RB"} runs it in from ${finalGain}`;
+              }
+              plays.push(finalPlay);
+              break;
             }
           }
         }
@@ -496,7 +603,7 @@ window.DriveEngine = {
           yards: 0, time: this.clockFor("interception"), playType: "interception", special: "int", text: ""
         };
         this.withPersonnel(game, play, {
-          qb: () => ({ interceptions: 1 }),
+          qb: () => ({ passAttempts: 1, interceptions: 1 }),
           def: () => ({ interceptions: 1, tackles: 1 })
         });
         play.text = `INTERCEPTION! ${play.actors.def ? play.actors.def.name : "DB"} picks off ${play.actors.qb ? play.actors.qb.name : "QB"}`;
@@ -549,6 +656,47 @@ window.DriveEngine = {
         break;
       }
 
+      case "blocked_kick": {
+        // Build to 4th down, then have kick blocked
+        const series = this.buildUntilFourth(game, { allowFirstDowns: false, stall: true, maxSnaps: 4 });
+        plays.push(...series.plays);
+        const yl = series.yardLine;
+        const isFg = this.inFgRange(yl);
+        const play = {
+          yards: 0,
+          time: this.clockFor(isFg ? "field_goal" : "punt"),
+          playType: isFg ? "field_goal" : "punt",
+          special: "blocked_kick",
+          text: ""
+        };
+        this.withPersonnel(game, play, {
+          k: () => isFg ? { fgMiss: 1 } : null,
+          p: () => !isFg ? { punts: 1 } : null,
+          def: () => ({ tackles: 1 })
+        });
+        const defender = play.actors.def ? play.actors.def.name : "defender";
+        const kicker = isFg && play.actors.k ? play.actors.k.name : (!isFg && play.actors.p ? play.actors.p.name : "kicker");
+        play.text = `BLOCKED KICK! ${defender} gets a hand on ${isFg ? "the field goal attempt" : "the punt"} by ${kicker}`;
+        plays.push(play);
+        break;
+      }
+
+      case "end_of_half": {
+        // Kneel down or time runs out
+        const play = {
+          yards: 0,
+          time: Math.min(game.clockSeconds, 40),
+          playType: "kneel",
+          special: "end_of_half",
+          text: "Kneel down — end of half/game"
+        };
+        this.withPersonnel(game, play, {
+          qb: () => ({ rushYds: 0 })
+        });
+        plays.push(play);
+        break;
+      }
+
       default: {
         const series = this.buildUntilFourth(game, { allowFirstDowns: false, stall: true, maxSnaps: 4 });
         plays.push(...series.plays);
@@ -566,11 +714,12 @@ window.DriveEngine = {
       field_goal: "DRIVE RESULT: Field Goal",
       missed_fg: "DRIVE RESULT: Missed Field Goal",
       punt: "DRIVE RESULT: Punt",
-      big_stop_punt: "DRIVE RESULT: Three-and-out / Punt",
       turnover_int: "DRIVE RESULT: Interception",
       turnover_fumble: "DRIVE RESULT: Fumble",
       turnover_downs: "DRIVE RESULT: Turnover on Downs",
-      safety: "DRIVE RESULT: Safety"
+      safety: "DRIVE RESULT: Safety",
+      blocked_kick: "DRIVE RESULT: Blocked Kick",
+      end_of_half: "DRIVE RESULT: End of Half/Game"
     };
     return map[id] || "DRIVE RESULT";
   }

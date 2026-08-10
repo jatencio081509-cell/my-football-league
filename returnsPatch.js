@@ -142,7 +142,7 @@
           text: "",
           actors: { qb, def: interceptor, interceptor },
           statPatches: [
-            { team: offTeam(game), player: qb, patch: { interceptions: 1 } },
+            { team: offTeam(game), player: qb, patch: { passAttempts: 1, interceptions: 1 } },
             {
               team: defTeam(game),
               player: interceptor,

@@ -138,14 +138,22 @@
         else game.awayScore += 7;
         game.playLog.push("*** TOUCHDOWN — PAT good (+7) ***");
         switchPossession();
-        doKickReturn();
+        // Don't auto-kickoff - let user control when to proceed
+        game.yardLine = 25;
+        game.down = 1;
+        game.distance = 10;
+        markDriveStart();
         break;
       case "fg":
         if (game.possession === "home") game.homeScore += 3;
         else game.awayScore += 3;
         game.playLog.push("*** FIELD GOAL (+3) ***");
         switchPossession();
-        doKickReturn();
+        // Don't auto-kickoff - let user control when to proceed
+        game.yardLine = 25;
+        game.down = 1;
+        game.distance = 10;
+        markDriveStart();
         break;
       case "miss_fg":
         switchPossession();
@@ -170,6 +178,17 @@
         game.down = 1;
         game.distance = 10;
         markDriveStart();
+        break;
+      case "blocked_kick":
+        switchPossession();
+        flipField();
+        game.down = 1;
+        game.distance = 10;
+        markDriveStart();
+        break;
+      case "end_of_half":
+        // End the half or game - no score change, just possession
+        game.playLog.push("*** END OF HALF/GAME ***");
         break;
       default:
         break;
@@ -210,7 +229,11 @@
       if (seen.has(id)) return;
       seen.add(id);
       const result = PS().maybeInjureFromPlay(team, player, step.playType || step.special);
-      if (result) game.playLog.push(result.text);
+      if (result) {
+        // Store injuries separately instead of in playLog
+        if (!game.injuryLog) game.injuryLog = [];
+        game.injuryLog.push(result.text);
+      }
     });
   }
 
@@ -229,7 +252,11 @@
         if (game.possession === "home") game.awayScore += 7;
         else game.homeScore += 7;
         game.playLog.push("*** PICK-SIX — TOUCHDOWN (+7) ***");
-        doKickReturn();
+        // Don't auto-kickoff - let user control when to proceed
+        game.yardLine = 25;
+        game.down = 1;
+        game.distance = 10;
+        markDriveStart();
         return true;
       }
       switchPossession();
@@ -246,7 +273,11 @@
         if (game.possession === "home") game.awayScore += 7;
         else game.homeScore += 7;
         game.playLog.push("*** SCOOP AND SCORE — TOUCHDOWN (+7) ***");
-        doKickReturn();
+        // Don't auto-kickoff - let user control when to proceed
+        game.yardLine = 25;
+        game.down = 1;
+        game.distance = 10;
+        markDriveStart();
         return true;
       }
       switchPossession();
@@ -258,13 +289,29 @@
       markDriveStart();
       return true;
     }
+    if (s === "blocked_kick") {
+      switchPossession();
+      flipField();
+      game.down = 1;
+      game.distance = 10;
+      markDriveStart();
+      return true;
+    }
+    if (s === "end_of_half") {
+      // End of half/game - no special handling needed
+      return true;
+    }
     if (s === "punt" || s === "punt_td") {
       const afterKick = game.yardLine + (step.yards || 40);
       if (s === "punt_td") {
         if (game.possession === "home") game.awayScore += 7;
         else game.homeScore += 7;
         game.playLog.push("*** PUNT RETURN TOUCHDOWN (+7) ***");
-        doKickReturn();
+        // Don't auto-kickoff - let user control when to proceed
+        game.yardLine = 25;
+        game.down = 1;
+        game.distance = 10;
+        markDriveStart();
         return true;
       }
       switchPossession();
