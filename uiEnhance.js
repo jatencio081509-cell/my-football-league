@@ -1,6 +1,52 @@
-// Team page depth chart + stats + injuries; awards projections
+// Team page depth chart + stats + injuries; awards; latest play under field
 (function () {
   function PS() { return window.PlayerSystem; }
+
+  function ensureLatestPlayEl() {
+    let el = document.getElementById("latest-play");
+    if (el) return el;
+    const poss = document.getElementById("possession-text");
+    if (!poss || !poss.parentNode) return null;
+    el = document.createElement("div");
+    el.id = "latest-play";
+    el.className = "latest-play";
+    el.innerHTML = `<span class="latest-play-label">LAST PLAY</span><span class="latest-play-text">—</span>`;
+    poss.parentNode.insertBefore(el, poss.nextSibling);
+    return el;
+  }
+
+  function refreshLatestPlay() {
+    const el = ensureLatestPlayEl();
+    if (!el) return;
+    const textEl = el.querySelector(".latest-play-text");
+    if (!textEl) return;
+    if (!window.game || !game.playLog || !game.playLog.length) {
+      textEl.textContent = "—";
+      return;
+    }
+    // Prefer real plays over separators / dice lines
+    const skip = /^(———|Dice:|\*\*\*|--- End)/;
+    let latest = null;
+    for (let i = game.playLog.length - 1; i >= 0; i--) {
+      const line = game.playLog[i];
+      if (!line || skip.test(line)) continue;
+      latest = line;
+      break;
+    }
+    textEl.textContent = latest || game.playLog[game.playLog.length - 1] || "—";
+  }
+
+  // Hook updateUI so latest play stays in sync
+  function hookUpdateUI() {
+    if (window.__mflLatestPlayHooked) return;
+    const prev = window.updateUI;
+    if (typeof prev !== "function") return;
+    window.__mflLatestPlayHooked = true;
+    window.updateUI = function () {
+      prev.apply(this, arguments);
+      refreshLatestPlay();
+    };
+  }
 
   function formatStats(p, team) {
     if (!PS()) return "";
@@ -33,13 +79,11 @@
   function ensureInjurySection() {
     let box = document.getElementById("team-page-injuries");
     if (box) return box;
-    const rosterSection = document.querySelector("#team-page-screen .team-page-section:last-child");
     const parent = document.getElementById("team-page-screen");
     if (!parent) return null;
     const section = document.createElement("div");
     section.className = "team-page-section";
     section.innerHTML = `<h3>Injuries</h3><div id="team-page-injuries" class="injury-box"></div>`;
-    // Insert before roster section if possible
     const rosterH = Array.from(parent.querySelectorAll(".team-page-section h3")).find(h => h.textContent === "Roster");
     if (rosterH && rosterH.parentNode) {
       parent.insertBefore(section, rosterH.parentNode);
@@ -57,7 +101,6 @@
     const key = teamKey(team);
     const players = (ROSTERS[key] || []).slice();
 
-    // Injuries panel
     const injBox = ensureInjurySection();
     if (injBox && PS()) {
       const injured = players
@@ -156,10 +199,41 @@
   };
 
   window.addEventListener("DOMContentLoaded", () => {
+    ensureLatestPlayEl();
+    hookUpdateUI();
+    // Re-hook after other scripts may wrap updateUI
+    setTimeout(hookUpdateUI, 0);
+    setTimeout(hookUpdateUI, 100);
+
     if (document.getElementById("ui-enhance-style")) return;
     const s = document.createElement("style");
     s.id = "ui-enhance-style";
     s.textContent = `
+      .latest-play {
+        margin: 8px 0 14px;
+        padding: 10px 14px;
+        background: #0d1a24;
+        border: 1px solid var(--field-green, #1E7B44);
+        border-left: 4px solid var(--gold, #FDB813);
+        border-radius: 8px;
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      .latest-play-label {
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 1px;
+        color: var(--gold, #FDB813);
+        flex-shrink: 0;
+      }
+      .latest-play-text {
+        color: #e8f1f8;
+        font-size: 0.95rem;
+        font-weight: 600;
+        line-height: 1.35;
+      }
       .role-starter {
         display: inline-block;
         margin-left: 6px;
@@ -202,10 +276,7 @@
         font-weight: 600;
       }
       .injured-row { opacity: 0.72; }
-      .injury-box {
-        display: grid;
-        gap: 10px;
-      }
+      .injury-box { display: grid; gap: 10px; }
       .injury-card {
         background: #1a0f0f;
         border: 1px solid #b91c1c;
