@@ -78,6 +78,37 @@
     setDriveControls("idle");
   }
 
+  function doKickReturn() {
+    const eng = DE();
+    if (!eng || typeof eng.makeKickReturn !== "function") {
+      game.yardLine = 25;
+      game.down = 1;
+      game.distance = 10;
+      markDriveStart();
+      return;
+    }
+    const kr = eng.makeKickReturn(game);
+    applyStats(kr);
+    game.playLog.push(kr.text);
+    if (kr.returnTd) {
+      if (game.possession === "home") game.homeScore += 7;
+      else game.awayScore += 7;
+      game.playLog.push("*** KICK RETURN TOUCHDOWN (+7) ***");
+      switchPossession();
+      game.yardLine = 25;
+      game.down = 1;
+      game.distance = 10;
+      markDriveStart();
+      // One-level only — no chain TDs
+      return;
+    }
+    const spot = Math.min(40, Math.max(15, kr.returnYards || 25));
+    game.yardLine = spot;
+    game.down = 1;
+    game.distance = 10;
+    markDriveStart();
+  }
+
   function applySpecial(special) {
     if (!special) return;
     switch (special) {
@@ -86,16 +117,14 @@
         else game.awayScore += 7;
         game.playLog.push("*** TOUCHDOWN — PAT good (+7) ***");
         switchPossession();
-        game.yardLine = 25;
-        markDriveStart();
+        doKickReturn();
         break;
       case "fg":
         if (game.possession === "home") game.homeScore += 3;
         else game.awayScore += 3;
         game.playLog.push("*** FIELD GOAL (+3) ***");
         switchPossession();
-        game.yardLine = 25;
-        markDriveStart();
+        doKickReturn();
         break;
       case "miss_fg":
         switchPossession();
@@ -104,8 +133,6 @@
         game.distance = 10;
         markDriveStart();
         break;
-      case "int":
-      case "fumble":
       case "downs":
         switchPossession();
         flipField();
@@ -129,7 +156,7 @@
   }
 
   function applyStats(step) {
-    if (!PS() || !step.statPatches) return;
+    if (!PS() || !step || !step.statPatches) return;
     step.statPatches.forEach(sp => {
       if (sp && sp.team && sp.player && sp.patch) {
         PS().addStat(sp.team, sp.player, sp.patch);
@@ -150,7 +177,7 @@
       Object.keys(step.actors).forEach(k => {
         const p = step.actors[k];
         if (!p) return;
-        const offRoles = ["qb", "rb", "wr", "k", "p"];
+        const offRoles = ["qb", "rb", "wr", "k", "p", "fumbler"];
         const team = offRoles.includes(k)
           ? (game.possession === "home" ? game.home : game.away)
           : (game.possession === "home" ? game.away : game.home);
@@ -164,9 +191,7 @@
       if (seen.has(id)) return;
       seen.add(id);
       const result = PS().maybeInjureFromPlay(team, player, step.playType || step.special);
-      if (result) {
-        game.playLog.push(result.text);
-      }
+      if (result) game.playLog.push(result.text);
     });
   }
 
@@ -178,35 +203,95 @@
     injuriesTickedForGame = true;
   }
 
+  /** INT / fumble / punt with return yards or return TD */
+  function applyReturnSpecial(step) {
+    const s = step.special;
+    if (s === "int" || s === "int_td") {
+      const intSpot = game.yardLine;
+      if (s === "int_td") {
+        if (game.possession === "home") game.awayScore += 7;
+        else game.homeScore += 7;
+        game.playLog.push("*** PICK-SIX — TOUCHDOWN (+7) ***");
+        // Original offense receives kickoff
+        doKickReturn();
+        return true;
+      }
+      switchPossession();
+      flipField();
+      const base = game.yardLine; // ~100 - intSpot
+      game.yardLine = Math.min(99, Math.max(1, base + (step.returnYards || 0)));
+      game.down = 1;
+      game.distance = 10;
+      markDriveStart();
+      return true;
+    }
+
+    if (s === "fumble" || s === "fumble_td") {
+      if (s === "fumble_td") {
+        if (game.possession === "home") game.awayScore += 7;
+        else game.homeScore += 7;
+        game.playLog.push("*** SCOOP AND SCORE — TOUCHDOWN (+7) ***");
+        doKickReturn();
+        return true;
+      }
+      switchPossession();
+      flipField();
+      const base = game.yardLine;
+      game.yardLine = Math.min(99, Math.max(1, base + (step.returnYards || 0)));
+      game.down = 1;
+      game.distance = 10;
+      markDriveStart();
+      return true;
+    }
+
+    if (s === "punt" || s === "punt_td") {
+      const afterKick = game.yardLine + (step.yards || 40);
+      if (s === "punt_td") {
+        if (game.possession === "home") game.awayScore += 7;
+        else game.homeScore += 7;
+        game.playLog.push("*** PUNT RETURN TOUCHDOWN (+7) ***");
+        doKickReturn();
+        return true;
+      }
+      switchPossession();
+      let spot = 100 - afterKick;
+      if (spot < 1) spot = 20;
+      if (spot > 80) spot = 20;
+      spot = Math.min(65, Math.max(1, spot + (step.returnYards || 0)));
+      game.yardLine = spot;
+      game.down = 1;
+      game.distance = 10;
+      markDriveStart();
+      return true;
+    }
+
+    return false;
+  }
+
   function applyPlayStep(step) {
     if (!game || game.gameOver) return;
 
     applyStats(step);
 
-    // Punt / FG / turnover on downs are 4th-down plays
-    if (step.special === "punt" || step.special === "fg" || step.special === "miss_fg" || step.special === "downs") {
+    if (step.special === "punt" || step.special === "punt_td" || step.special === "fg" ||
+        step.special === "miss_fg" || step.special === "downs") {
       game.down = 4;
     }
 
-    if (step.special === "punt") {
-      const afterKick = game.yardLine + step.yards;
-      game.playLog.push(step.text);
+    // Returns / turnovers with returns
+    if (step.special === "int" || step.special === "int_td" ||
+        step.special === "fumble" || step.special === "fumble_td" ||
+        step.special === "punt" || step.special === "punt_td") {
+      game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
       checkInjuries(step);
-      switchPossession();
-      let spot = 100 - afterKick;
-      if (spot < 1) spot = 20;
-      if (spot > 80) spot = 20;
-      game.yardLine = spot;
-      game.down = 1;
-      game.distance = 10;
-      markDriveStart();
+      applyReturnSpecial(step);
       applyTime(step.time);
       updateUI();
       return;
     }
 
-    if (step.special !== "fg" && step.special !== "miss_fg" && step.special !== "int" && step.special !== "fumble") {
-      game.yardLine += step.yards;
+    if (step.special !== "fg" && step.special !== "miss_fg") {
+      game.yardLine += step.yards || 0;
       if (game.yardLine < 0) game.yardLine = 0;
       if (game.yardLine > 100) game.yardLine = 100;
 
@@ -216,7 +301,6 @@
           game.distance = 10;
           if (game.yardLine >= 90) game.distance = Math.max(1, 100 - game.yardLine);
         } else if (game.down >= 4) {
-          // Already 4th and short → turnover on downs (never 5th)
           game.playLog.push(step.text + (step.time ? `  (−${step.time}s)` : ""));
           game.playLog.push("4th down — short of the marker. Turnover on downs");
           checkInjuries(step);
@@ -299,7 +383,6 @@
 
     markDriveStart();
 
-    // Fresh series always starts 1st & 10 unless mid-drive state exists
     if (!game.down || game.down < 1 || game.down > 4) {
       game.down = 1;
       game.distance = 10;
@@ -340,7 +423,6 @@
   const origUpdateUI = window.updateUI;
   if (typeof origUpdateUI === "function") {
     window.updateUI = function () {
-      // Clamp downs before paint
       if (game) {
         if (game.down > 4) game.down = 4;
         if (game.down < 1) game.down = 1;
