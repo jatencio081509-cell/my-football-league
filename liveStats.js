@@ -18,44 +18,42 @@ window.LiveStats = {
     };
   },
 
-  ensureGame(game) {
-    if (!game) return;
-    if (!game.liveStats) game.liveStats = {}; // key: teamKey::name
+  ensureGame(g) {
+    if (!g) return;
+    if (!g.liveStats) g.liveStats = {};
   },
 
   key(team, player) {
     return teamKey(team) + "::" + player.name;
   },
 
-  /** Apply a stat patch to this game's live board. */
-  add(game, team, player, patch) {
-    if (!game || !team || !player || !patch) return;
-    this.ensureGame(game);
+  add(g, team, player, patch) {
+    if (!g || !team || !player || !patch) return;
+    this.ensureGame(g);
     const id = this.key(team, player);
-    if (!game.liveStats[id]) {
-      game.liveStats[id] = {
+    if (!g.liveStats[id]) {
+      g.liveStats[id] = {
         name: player.name,
         position: player.position,
         starter: !!player.starter,
         teamKey: teamKey(team),
         teamName: teamName(team),
-        side: game.home && teamKey(team) === teamKey(game.home) ? "home" : "away",
+        side: g.home && teamKey(team) === teamKey(g.home) ? "home" : "away",
         stats: this.empty()
       };
     }
-    const row = game.liveStats[id];
+    const row = g.liveStats[id];
     row.stats.plays += 1;
     Object.keys(patch).forEach(k => {
       row.stats[k] = (row.stats[k] || 0) + (patch[k] || 0);
     });
   },
 
-  /** Ingest all patches from a play step. */
-  fromStep(game, step) {
+  fromStep(g, step) {
     if (!step || !step.statPatches) return;
     step.statPatches.forEach(sp => {
       if (sp && sp.team && sp.player && sp.patch) {
-        this.add(game, sp.team, sp.player, sp.patch);
+        this.add(g, sp.team, sp.player, sp.patch);
       }
     });
   },
@@ -63,10 +61,8 @@ window.LiveStats = {
   formatLine(row) {
     const s = row.stats;
     const bits = [];
-    if (row.position === "QB" || s.passYds || s.passTd || s.interceptions) {
-      if (s.passYds || s.passTd || s.interceptions) {
-        bits.push(`${s.passYds} pass · ${s.passTd} TD · ${s.interceptions} INT`);
-      }
+    if (s.passYds || s.passTd || (s.interceptions && row.position === "QB")) {
+      bits.push(`${s.passYds} pass · ${s.passTd} TD · ${s.interceptions} INT`);
     }
     if (s.rushYds || s.rushTd) bits.push(`${s.rushYds} rush · ${s.rushTd} TD`);
     if (s.receptions || s.recYds || s.recTd) {
@@ -79,7 +75,7 @@ window.LiveStats = {
     if (s.fgMade || s.fgMiss) bits.push(`FG ${s.fgMade}/${s.fgMade + s.fgMiss}`);
     if (s.punts) bits.push(`${s.punts} punt · ${s.puntYds} yds`);
     if (s.returnYds || s.returnTd || s.kickRetYds || s.puntRetYds) {
-      const ry = s.returnYds || (s.kickRetYds + s.puntRetYds);
+      const ry = (s.returnYds || 0) || ((s.kickRetYds || 0) + (s.puntRetYds || 0));
       bits.push(`${ry} ret yds${s.returnTd ? " · " + s.returnTd + " ret TD" : ""}`);
     }
     if (s.fumblesLost) bits.push(`${s.fumblesLost} fum lost`);
@@ -88,11 +84,10 @@ window.LiveStats = {
     return bits.join("  |  ");
   },
 
-  rows(game) {
-    if (!game || !game.liveStats) return [];
-    return Object.values(game.liveStats).sort((a, b) => {
+  rows(g) {
+    if (!g || !g.liveStats) return [];
+    return Object.values(g.liveStats).sort((a, b) => {
       if (a.side !== b.side) return a.side === "away" ? -1 : 1;
-      // More involved first
       const score = r =>
         (r.stats.passYds || 0) + (r.stats.rushYds || 0) * 1.2 + (r.stats.recYds || 0) +
         (r.stats.tackles || 0) * 8 + (r.stats.sacks || 0) * 20 +
@@ -113,27 +108,26 @@ window.LiveStats = {
     panel.innerHTML = `
       <div class="live-stats-header">
         <h3>Live Player Stats</h3>
-        <span class="live-stats-sub">This game only</span>
+        <span class="live-stats-sub">This game only · updates every play</span>
       </div>
       <div class="live-stats-cols">
-        <div class="live-stats-team" id="live-stats-away">
+        <div class="live-stats-team">
           <div class="live-stats-team-title" id="live-stats-away-title">Away</div>
           <div class="live-stats-list" id="live-stats-away-list"></div>
         </div>
-        <div class="live-stats-team" id="live-stats-home">
+        <div class="live-stats-team">
           <div class="live-stats-team-title" id="live-stats-home-title">Home</div>
           <div class="live-stats-list" id="live-stats-home-list"></div>
         </div>
       </div>
     `;
-    // Place above play log if possible
     const playLog = gameScreen.querySelector(".play-log");
     if (playLog) gameScreen.insertBefore(panel, playLog);
     else gameScreen.appendChild(panel);
     return panel;
   },
 
-  render(game) {
+  render(g) {
     this.ensurePanel();
     const awayList = document.getElementById("live-stats-away-list");
     const homeList = document.getElementById("live-stats-home-list");
@@ -141,31 +135,29 @@ window.LiveStats = {
     const homeTitle = document.getElementById("live-stats-home-title");
     if (!awayList || !homeList) return;
 
-    if (game) {
-      if (awayTitle) awayTitle.textContent = teamName(game.away);
-      if (homeTitle) homeTitle.textContent = teamName(game.home);
+    if (g) {
+      if (awayTitle) awayTitle.textContent = teamName(g.away);
+      if (homeTitle) homeTitle.textContent = teamName(g.home);
     }
 
-    const rows = this.rows(game);
+    const rows = this.rows(g);
     const away = rows.filter(r => r.side === "away");
     const home = rows.filter(r => r.side === "home");
 
     function paint(listEl, list) {
       if (!list.length) {
-        listEl.innerHTML = `<div class="live-stats-empty">No stats yet</div>`;
+        listEl.innerHTML = `<div class="live-stats-empty">No stats yet — play will show here</div>`;
         return;
       }
-      listEl.innerHTML = list.map(r => {
-        const role = r.starter ? "STARTER" : "Bench";
-        return `<div class="live-stat-row">
+      listEl.innerHTML = list.map(r => `
+        <div class="live-stat-row">
           <div class="live-stat-name">
             <strong>${r.name}</strong>
             <span class="live-stat-pos">${r.position}</span>
-            <span class="live-stat-role ${r.starter ? "is-starter" : ""}">${role}</span>
+            <span class="live-stat-role ${r.starter ? "is-starter" : ""}">${r.starter ? "STARTER" : "Bench"}</span>
           </div>
           <div class="live-stat-line">${window.LiveStats.formatLine(r)}</div>
-        </div>`;
-      }).join("");
+        </div>`).join("");
     }
 
     paint(awayList, away);
@@ -174,36 +166,70 @@ window.LiveStats = {
 };
 
 (function () {
-  function hook() {
-    // After stats applied in driveIntegrate, also feed live board
+  function currentGame() {
+    try {
+      if (typeof game !== "undefined" && game) return game;
+    } catch (e) {}
+    return window.game || null;
+  }
+
+  function hookAddStat() {
+    const PS = window.PlayerSystem;
+    if (!PS || PS.__liveStatsHooked) return;
+    const orig = PS.addStat.bind(PS);
+    PS.addStat = function (team, player, patch) {
+      orig(team, player, patch);
+      const g = currentGame();
+      if (g && window.LiveStats) {
+        window.LiveStats.add(g, team, player, patch);
+        window.LiveStats.render(g);
+      }
+    };
+    PS.__liveStatsHooked = true;
+  }
+
+  function hookUI() {
     const prev = window.updateUI;
     if (typeof prev !== "function" || prev.__liveStats) return;
     function wrapped() {
       prev.apply(this, arguments);
-      try {
-        if (typeof game !== "undefined" && game && window.LiveStats) {
-          window.LiveStats.render(game);
-        }
-      } catch (e) {}
+      const g = currentGame();
+      if (g && window.LiveStats) window.LiveStats.render(g);
     }
     wrapped.__liveStats = true;
     window.updateUI = wrapped;
   }
 
-  // Expose helper for driveIntegrate to call
-  window.__mflLiveStatFromStep = function (step) {
-    try {
-      if (typeof game !== "undefined" && game && window.LiveStats) {
-        window.LiveStats.fromStep(game, step);
+  // Reset live board on new game
+  function hookCreate() {
+    const prev = window.createNewGame;
+    if (typeof prev !== "function" || prev.__liveStats) return;
+    function wrapped(home, away, scheduledGame) {
+      const g = prev(home, away, scheduledGame);
+      if (g) {
+        g.liveStats = {};
+        setTimeout(() => window.LiveStats && window.LiveStats.render(g), 0);
       }
-    } catch (e) {}
+      return g;
+    }
+    wrapped.__liveStats = true;
+    window.createNewGame = wrapped;
+  }
+
+  window.__mflLiveStatFromStep = function (step) {
+    const g = currentGame();
+    if (g && window.LiveStats) window.LiveStats.fromStep(g, step);
   };
 
   window.addEventListener("DOMContentLoaded", () => {
     window.LiveStats.ensurePanel();
-    hook();
-    setTimeout(hook, 50);
-    setTimeout(hook, 200);
+    hookAddStat();
+    hookUI();
+    hookCreate();
+    setTimeout(hookAddStat, 50);
+    setTimeout(hookUI, 50);
+    setTimeout(hookCreate, 50);
+    setTimeout(hookAddStat, 200);
 
     if (document.getElementById("live-stats-style")) return;
     const s = document.createElement("style");
@@ -222,6 +248,7 @@ window.LiveStats = {
         justify-content: space-between;
         margin-bottom: 12px;
         gap: 10px;
+        flex-wrap: wrap;
       }
       .live-stats-header h3 {
         margin: 0;
@@ -232,7 +259,6 @@ window.LiveStats = {
         color: #6b8499;
         font-size: 0.75rem;
         font-weight: 600;
-        letter-spacing: 0.4px;
       }
       .live-stats-cols {
         display: grid;
