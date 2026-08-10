@@ -1,8 +1,25 @@
 // ============================================
 // LIVE GAME STATS — updates as plays happen
+// Also feeds season stats via PlayerSystem.addStat
 // ============================================
 
 window.LiveStats = {
+  view: "offense", // "offense" | "defense"
+
+  OFF_POS: ["QB", "RB", "WR", "TE", "OL", "K", "P"],
+  DEF_POS: ["DL", "LB", "CB", "S"],
+
+  posOrder(side) {
+    return side === "defense" ? this.DEF_POS : this.OFF_POS;
+  },
+
+  isOffense(pos) {
+    return this.OFF_POS.includes(pos);
+  },
+  isDefense(pos) {
+    return this.DEF_POS.includes(pos);
+  },
+
   empty() {
     return {
       passYds: 0, passTd: 0, interceptions: 0,
@@ -84,17 +101,37 @@ window.LiveStats = {
     return bits.join("  |  ");
   },
 
+  /** Filter by offense/defense and sort by position order, then name. */
   rows(g) {
     if (!g || !g.liveStats) return [];
-    return Object.values(g.liveStats).sort((a, b) => {
-      if (a.side !== b.side) return a.side === "away" ? -1 : 1;
-      const score = r =>
-        (r.stats.passYds || 0) + (r.stats.rushYds || 0) * 1.2 + (r.stats.recYds || 0) +
-        (r.stats.tackles || 0) * 8 + (r.stats.sacks || 0) * 20 +
-        (r.stats.passTd || 0) * 40 + (r.stats.rushTd || 0) * 40 + (r.stats.recTd || 0) * 40 +
-        (r.stats.returnTd || 0) * 50 + (r.stats.plays || 0);
-      return score(b) - score(a);
-    });
+    const order = this.posOrder(this.view);
+    const filterFn = this.view === "defense"
+      ? (r) => this.isDefense(r.position)
+      : (r) => this.isOffense(r.position);
+
+    return Object.values(g.liveStats)
+      .filter(filterFn)
+      .sort((a, b) => {
+        if (a.side !== b.side) return a.side === "away" ? -1 : 1;
+        const ia = order.indexOf(a.position);
+        const ib = order.indexOf(b.position);
+        const pa = ia === -1 ? 99 : ia;
+        const pb = ib === -1 ? 99 : ib;
+        if (pa !== pb) return pa - pb;
+        if (!!a.starter !== !!b.starter) return a.starter ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  },
+
+  setView(view) {
+    this.view = view === "defense" ? "defense" : "offense";
+    const offBtn = document.getElementById("live-stats-btn-off");
+    const defBtn = document.getElementById("live-stats-btn-def");
+    if (offBtn) offBtn.classList.toggle("active", this.view === "offense");
+    if (defBtn) defBtn.classList.toggle("active", this.view === "defense");
+    try {
+      if (typeof game !== "undefined" && game) this.render(game);
+    } catch (e) {}
   },
 
   ensurePanel() {
@@ -107,8 +144,14 @@ window.LiveStats = {
     panel.className = "live-stats-panel";
     panel.innerHTML = `
       <div class="live-stats-header">
-        <h3>Live Player Stats</h3>
-        <span class="live-stats-sub">This game only · updates every play</span>
+        <div class="live-stats-title-block">
+          <h3>Live Player Stats</h3>
+          <span class="live-stats-sub">This game · also counts toward season stats</span>
+        </div>
+        <div class="live-stats-toggles" role="group" aria-label="Stat side">
+          <button type="button" id="live-stats-btn-off" class="live-stats-toggle active">Offensive</button>
+          <button type="button" id="live-stats-btn-def" class="live-stats-toggle">Defensive</button>
+        </div>
       </div>
       <div class="live-stats-cols">
         <div class="live-stats-team">
@@ -124,6 +167,12 @@ window.LiveStats = {
     const playLog = gameScreen.querySelector(".play-log");
     if (playLog) gameScreen.insertBefore(panel, playLog);
     else gameScreen.appendChild(panel);
+
+    const offBtn = document.getElementById("live-stats-btn-off");
+    const defBtn = document.getElementById("live-stats-btn-def");
+    if (offBtn) offBtn.addEventListener("click", () => window.LiveStats.setView("offense"));
+    if (defBtn) defBtn.addEventListener("click", () => window.LiveStats.setView("defense"));
+
     return panel;
   },
 
@@ -144,24 +193,41 @@ window.LiveStats = {
     const away = rows.filter(r => r.side === "away");
     const home = rows.filter(r => r.side === "home");
 
+    const emptyMsg = this.view === "defense"
+      ? "No defensive stats yet"
+      : "No offensive stats yet";
+
     function paint(listEl, list) {
       if (!list.length) {
-        listEl.innerHTML = `<div class="live-stats-empty">No stats yet — play will show here</div>`;
+        listEl.innerHTML = `<div class="live-stats-empty">${emptyMsg}</div>`;
         return;
       }
-      listEl.innerHTML = list.map(r => `
-        <div class="live-stat-row">
-          <div class="live-stat-name">
-            <strong>${r.name}</strong>
-            <span class="live-stat-pos">${r.position}</span>
-            <span class="live-stat-role ${r.starter ? "is-starter" : ""}">${r.starter ? "STARTER" : "Bench"}</span>
-          </div>
-          <div class="live-stat-line">${window.LiveStats.formatLine(r)}</div>
-        </div>`).join("");
+      let html = "";
+      let lastPos = null;
+      list.forEach(r => {
+        if (r.position !== lastPos) {
+          lastPos = r.position;
+          html += `<div class="live-stat-pos-header">${r.position}</div>`;
+        }
+        html += `
+          <div class="live-stat-row">
+            <div class="live-stat-name">
+              <strong>${r.name}</strong>
+              <span class="live-stat-role ${r.starter ? "is-starter" : ""}">${r.starter ? "STARTER" : "Bench"}</span>
+            </div>
+            <div class="live-stat-line">${window.LiveStats.formatLine(r)}</div>
+          </div>`;
+      });
+      listEl.innerHTML = html;
     }
 
     paint(awayList, away);
     paint(homeList, home);
+
+    const offBtn = document.getElementById("live-stats-btn-off");
+    const defBtn = document.getElementById("live-stats-btn-def");
+    if (offBtn) offBtn.classList.toggle("active", this.view === "offense");
+    if (defBtn) defBtn.classList.toggle("active", this.view === "defense");
   }
 };
 
@@ -178,6 +244,7 @@ window.LiveStats = {
     if (!PS || PS.__liveStatsHooked) return;
     const orig = PS.addStat.bind(PS);
     PS.addStat = function (team, player, patch) {
+      // Season / overall stats (localStorage) + live board
       orig(team, player, patch);
       const g = currentGame();
       if (g && window.LiveStats) {
@@ -200,7 +267,6 @@ window.LiveStats = {
     window.updateUI = wrapped;
   }
 
-  // Reset live board on new game
   function hookCreate() {
     const prev = window.createNewGame;
     if (typeof prev !== "function" || prev.__liveStats) return;
@@ -244,21 +310,49 @@ window.LiveStats = {
       }
       .live-stats-header {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         justify-content: space-between;
-        margin-bottom: 12px;
-        gap: 10px;
+        margin-bottom: 14px;
+        gap: 12px;
         flex-wrap: wrap;
       }
-      .live-stats-header h3 {
-        margin: 0;
+      .live-stats-title-block h3 {
+        margin: 0 0 2px;
         color: var(--gold, #FDB813);
         font-size: 1rem;
       }
       .live-stats-sub {
         color: #6b8499;
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         font-weight: 600;
+      }
+      .live-stats-toggles {
+        display: inline-flex;
+        background: #122438;
+        border: 1px solid #1E7B44;
+        border-radius: 999px;
+        padding: 3px;
+        gap: 2px;
+      }
+      .live-stats-toggle {
+        border: none;
+        background: transparent;
+        color: #a8bdd0;
+        font-weight: 800;
+        font-size: 0.78rem;
+        letter-spacing: 0.4px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+      }
+      .live-stats-toggle:hover {
+        color: #e8f1f8;
+      }
+      .live-stats-toggle.active {
+        background: linear-gradient(135deg, #1E7B44, #1D70B8);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(30, 123, 68, 0.35);
       }
       .live-stats-cols {
         display: grid;
@@ -281,9 +375,21 @@ window.LiveStats = {
         font-size: 0.85rem;
         padding: 8px 0;
       }
+      .live-stat-pos-header {
+        margin-top: 10px;
+        margin-bottom: 4px;
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 1px;
+        color: #FDB813;
+        text-transform: uppercase;
+      }
+      .live-stat-pos-header:first-child {
+        margin-top: 0;
+      }
       .live-stat-row {
-        padding: 8px 0;
-        border-bottom: 1px solid rgba(30, 123, 68, 0.25);
+        padding: 7px 0;
+        border-bottom: 1px solid rgba(30, 123, 68, 0.2);
       }
       .live-stat-row:last-child { border-bottom: none; }
       .live-stat-name {
@@ -291,15 +397,10 @@ window.LiveStats = {
         flex-wrap: wrap;
         align-items: center;
         gap: 6px;
-        margin-bottom: 3px;
-      }
-      .live-stat-pos {
-        color: #a8bdd0;
-        font-size: 0.75rem;
-        font-weight: 700;
+        margin-bottom: 2px;
       }
       .live-stat-role {
-        font-size: 0.6rem;
+        font-size: 0.58rem;
         font-weight: 800;
         letter-spacing: 0.4px;
         color: #a8bdd0;
